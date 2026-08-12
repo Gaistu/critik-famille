@@ -219,7 +219,8 @@ function renderApp(){
       '</div>'+
     '</header>'+
     '<div class="viewtabs" id="viewtabs">'+
-      '<button data-view="catalogue">Catalogue</button>'+
+      '<button data-view="catalogue">Cartes</button>'+
+      '<button data-view="compact">Liste</button>'+
       '<button data-view="stats">Statistiques</button>'+
     '</div>'+
     '<div id="content"></div>'+
@@ -259,13 +260,14 @@ function renderContent(){
       '<button class="add-btn" id="addBtn">+ Ajouter</button>'+
     '</div>'+
     '<div id="listArea"></div>';
-  var si=$("#searchInput"); si.value=state.query; si.addEventListener("input",function(e){ state.query=e.target.value; renderGrid(); });
-  fillSelect($("#fStatus"), [["all","Tous les statuts"]].concat(STATUSES.map(function(s){return [s.id,s.label];})), state.fStatus, function(v){ state.fStatus=v; renderGrid(); });
-  fillSelect($("#fMember"), [["all","Tout le monde"]].concat(state.members.map(function(m){return [m.id,m.name];})), state.fMember, function(v){ state.fMember=v; renderGrid(); });
-  fillSelect($("#sortSel"), [["recent","Plus récents"],["rating","Mieux notés"],["az","A → Z"]], state.sort, function(v){ state.sort=v; renderGrid(); });
+  var si=$("#searchInput"); si.value=state.query; si.addEventListener("input",function(e){ state.query=e.target.value; renderList(); });
+  fillSelect($("#fStatus"), [["all","Tous les statuts"]].concat(STATUSES.map(function(s){return [s.id,s.label];})), state.fStatus, function(v){ state.fStatus=v; renderList(); });
+  fillSelect($("#fMember"), [["all","Tout le monde"]].concat(state.members.map(function(m){return [m.id,m.name];})), state.fMember, function(v){ state.fMember=v; renderList(); });
+  fillSelect($("#sortSel"), [["recent","Plus récents"],["rating","Mieux notés"],["az","A → Z"]], state.sort, function(v){ state.sort=v; renderList(); });
   $("#addBtn").onclick=function(){ openEntryModal(null); };
-  renderStatsStrip(); renderGrid();
+  renderStatsStrip(); renderList();
 }
+function renderList(){ if(state.view==="compact") renderCompact(); else renderGrid(); }
 function fillSelect(sel,options,value,onChange){ sel.innerHTML="";
   options.forEach(function(pair){ var o=document.createElement("option"); o.value=pair[0]; o.textContent=pair[1]; sel.appendChild(o); });
   sel.value=value; sel.onchange=function(){ onChange(sel.value); }; }
@@ -326,6 +328,39 @@ function renderGrid(){
   });
   area.innerHTML=""; area.appendChild(grid);
 }
+function renderCompact(){
+  var area=$("#listArea"); if(!area) return;
+  var list=visibleEntries();
+  if(list.length===0){ area.innerHTML='<div class="empty"><div class="empty__ico">🗂️</div><p>Rien ici pour l\'instant.</p></div>';
+    var btn=document.createElement("button"); btn.className="add-btn"; btn.textContent="Ajouter la première fiche"; btn.onclick=function(){ openEntryModal(null); };
+    area.querySelector(".empty").appendChild(btn); return; }
+  var wrap=document.createElement("div"); wrap.className="clist";
+  list.forEach(function(e){
+    var t=typeMeta(e.type), m=memberById(e.memberId), st=statusMeta(e.status||"done");
+    var thumb=e.hasCover&&state.covers[e.id]
+      ? '<span class="crow__thumb"><img src="'+state.covers[e.id]+'" alt=""></span>'
+      : '<span class="crow__thumb crow__thumb--ph" style="background:'+t.color+'22;color:'+t.color+'">'+t.icon+'</span>';
+    var badge=(e.status&&e.status!=="done")?'<span class="status-chip" style="color:'+st.color+';border-color:'+st.color+'">'+st.icon+' '+st.label+'</span>':"";
+    var avatar=m?'<span class="avatar avatar--sm" style="background:'+m.color+'" title="'+esc(m.name)+'">'+esc(m.name.slice(0,1).toUpperCase())+'</span>':"";
+    var year=e.year?'<span class="crow__year"> · '+esc(e.year)+'</span>':"";
+    var score=e.rating?'<span class="crow__score">'+starsHTML(e.rating,13)+' <b>'+nfr(e.rating)+'</b></span>':'<span class="crow__score crow__score--none">non noté</span>';
+    var row=document.createElement("div"); row.className="crow"; row.style.setProperty("--c",t.color);
+    row.innerHTML=
+      thumb+
+      '<span class="crow__main">'+
+        '<span class="crow__title">'+esc(e.title)+year+'</span>'+
+        '<span class="crow__meta"><span class="crow__type" style="color:'+t.color+'">'+t.icon+' '+t.label+'</span>'+badge+score+'</span>'+
+      '</span>'+
+      '<span class="crow__right">'+avatar+
+        '<span class="crow__actions"><button data-act="edit" title="Modifier">✎</button><button data-act="del" title="Supprimer">🗑</button></span>'+
+      '</span>';
+    row.querySelector('[data-act="edit"]').onclick=function(ev){ ev.stopPropagation(); openEntryModal(e); };
+    row.querySelector('[data-act="del"]').onclick=function(ev){ ev.stopPropagation(); deleteEntry(e); };
+    row.addEventListener("click",function(){ openEntryModal(e); });
+    wrap.appendChild(row);
+  });
+  area.innerHTML=""; area.appendChild(wrap);
+}
 function deleteEntry(entry){
   if(!confirm("Supprimer cette fiche ?")) return;
   state.entries=state.entries.filter(function(e){return e.id!==entry.id;}); delete state.covers[entry.id];
@@ -335,7 +370,7 @@ function deleteEntry(entry){
 function refreshAfterData(){
   updateSub();
   if(state.view==="stats"){ var c=$("#content"); if(c){ c.innerHTML=""; c.appendChild(renderStats()); } }
-  else { renderStatsStrip(); renderGrid(); }
+  else { renderStatsStrip(); renderList(); }
 }
 
 /* ============================ Statistiques ============================== */

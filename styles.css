@@ -88,6 +88,28 @@ body{
 .card__actions button{ border:none; background:transparent; cursor:pointer; font-size:14px; padding:3px 5px; border-radius:6px; color:var(--soft) }
 .card__actions button:hover{ background:var(--paper2); color:var(--ink) }
 
+/* Liste compacte */
+.clist{ display:flex; flex-direction:column; gap:8px }
+.crow{ display:flex; align-items:center; gap:12px; background:var(--card); border:1px solid var(--line);
+  border-left:5px solid var(--c); border-radius:12px; padding:9px 12px; cursor:pointer; transition:background .1s, transform .08s }
+.crow:hover{ background:#fff; transform:translateX(2px) }
+.crow__thumb{ width:38px; height:52px; border-radius:6px; overflow:hidden; flex-shrink:0; display:grid; place-items:center }
+.crow__thumb img{ width:100%; height:100%; object-fit:cover; display:block }
+.crow__thumb--ph{ font-size:20px }
+.crow__main{ flex:1; min-width:0; display:flex; flex-direction:column; gap:3px }
+.crow__title{ font-family:'Fraunces',serif; font-weight:600; font-size:16px; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.crow__year{ color:var(--soft); font-weight:400 }
+.crow__meta{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:12.5px }
+.crow__type{ font-weight:600 }
+.crow__score{ display:inline-flex; align-items:center; gap:4px; color:var(--ink) }
+.crow__score--none{ color:var(--soft); font-style:italic }
+.crow__right{ display:flex; align-items:center; gap:8px; flex-shrink:0 }
+.avatar--sm{ width:24px; height:24px; font-size:12px }
+.crow__actions{ display:flex; gap:2px }
+.crow__actions button{ border:none; background:transparent; cursor:pointer; font-size:14px; padding:4px 6px; border-radius:6px; color:var(--soft) }
+.crow__actions button:hover{ background:var(--paper2); color:var(--ink) }
+@media (max-width:560px){ .crow__actions{ opacity:1 } .crow__thumb{ width:34px; height:47px } }
+
 /* Stars */
 .stars{ display:inline-flex; gap:2px; line-height:1 }
 .star{ position:relative; display:inline-block; color:#D9CDB8 }
