@@ -63,6 +63,7 @@ var SETUP_SQL =
 "  type text not null,\n"+
 "  title text not null,\n"+
 "  year text,\n"+
+"  season text,\n"+
 "  member_id text,\n"+
 "  rating numeric default 0,\n"+
 "  review text,\n"+
@@ -124,7 +125,7 @@ function editableStars(value,size,onChange){
 
 /* ============================== Data layer ============================= */
 function rowToEntry(r){
-  return { id:r.id, type:r.type, title:r.title, year:r.year||"", memberId:r.member_id,
+  return { id:r.id, type:r.type, title:r.title, year:r.year||"", season:r.season||"", memberId:r.member_id,
     rating:Number(r.rating)||0, review:r.review||"", status:r.status||"done",
     hasCover:!!r.cover, createdAt:r.created_at?new Date(r.created_at).getTime():0 };
 }
@@ -309,11 +310,12 @@ function renderGrid(){
     var score=e.rating?'<span class="note-badge">'+nfr(e.rating)+'<span class="note-badge__out">/10</span></span>':'<span class="card__score card__score--none">non noté</span>';
     var review=e.review?'<p class="card__review">'+esc(e.review)+'</p>':"";
     var year=e.year?'<span class="card__year"> · '+esc(e.year)+'</span>':"";
+    var season=(e.season&&(e.type==="serie"||e.type==="anime"))?'<span class="card__year"> · Saison '+esc(e.season)+'</span>':"";
     var card=document.createElement("article"); card.className="card"; card.style.setProperty("--c",t.color);
     card.innerHTML='<div class="card__spine"></div><div class="card__body">'+cover+
       '<div class="card__top"><span class="pill" style="color:'+t.color+';border-color:'+t.color+'">'+t.icon+' '+t.label+'</span>'+
         '<div class="card__badges">'+badge+avatar+'</div></div>'+
-      '<h3 class="card__title">'+esc(e.title)+year+'</h3>'+
+      '<h3 class="card__title">'+esc(e.title)+season+year+'</h3>'+
       '<div class="card__rating">'+score+'</div>'+review+
       '<div class="card__foot"><span>'+foot+'</span>'+
         '<span class="card__actions"><button data-act="edit" title="Modifier">✎</button><button data-act="del" title="Supprimer">🗑</button></span></div></div>';
@@ -338,12 +340,13 @@ function renderCompact(){
     var badge=(e.status&&e.status!=="done")?'<span class="status-chip" style="color:'+st.color+';border-color:'+st.color+'">'+st.icon+' '+st.label+'</span>':"";
     var avatar=m?'<span class="avatar avatar--sm" style="background:'+m.color+'" title="'+esc(m.name)+'">'+esc(m.name.slice(0,1).toUpperCase())+'</span>':"";
     var year=e.year?'<span class="crow__year"> · '+esc(e.year)+'</span>':"";
+    var season=(e.season&&(e.type==="serie"||e.type==="anime"))?'<span class="crow__year"> · S'+esc(e.season)+'</span>':"";
     var score=e.rating?'<span class="crow__score"><b>'+nfr(e.rating)+'</b>/10</span>':'<span class="crow__score crow__score--none">non noté</span>';
     var row=document.createElement("div"); row.className="crow"; row.style.setProperty("--c",t.color);
     row.innerHTML=
       thumb+
       '<span class="crow__main">'+
-        '<span class="crow__title">'+esc(e.title)+year+'</span>'+
+        '<span class="crow__title">'+esc(e.title)+season+year+'</span>'+
         '<span class="crow__meta"><span class="crow__type" style="color:'+t.color+'">'+t.icon+' '+t.label+'</span>'+badge+score+'</span>'+
       '</span>'+
       '<span class="crow__right">'+avatar+
@@ -385,8 +388,8 @@ function renderStats(){
   var maxType=Math.max.apply(null,[1].concat(perType.map(function(t){return t.count;})));
   function inWho(e){ return state.who==="all"||e.memberId===state.who; }
   function podium(items){ return items.length===0?'<p class="muted">Aucune note pour l\'instant.</p>'
-    :'<ol class="podium">'+items.map(function(e){ var t=typeMeta(e.type);
-      return '<li><span class="podium__dot" style="background:'+t.color+'">'+t.icon+'</span><span class="podium__title">'+esc(e.title)+'</span><span class="podium__by">'+esc(memberName(e.memberId))+'</span><span class="podium__rate"><b>'+nfr(e.rating)+'</b>/10</span></li>'; }).join("")+'</ol>'; }
+    :'<ol class="podium">'+items.map(function(e){ var t=typeMeta(e.type); var sea=(e.season&&(e.type==="serie"||e.type==="anime"))?" · S"+esc(e.season):"";
+      return '<li><span class="podium__dot" style="background:'+t.color+'">'+t.icon+'</span><span class="podium__title">'+esc(e.title)+sea+'</span><span class="podium__by">'+esc(memberName(e.memberId))+'</span><span class="podium__rate"><b>'+nfr(e.rating)+'</b>/10</span></li>'; }).join("")+'</ol>'; }
   var topAll=rated.filter(inWho).sort(function(a,b){return b.rating-a.rating||(b.createdAt||0)-(a.createdAt||0);}).slice(0,5);
   var topYear=thisYear.filter(function(e){return e.rating>0&&inWho(e);}).sort(function(a,b){return b.rating-a.rating||(b.createdAt||0)-(a.createdAt||0);}).slice(0,5);
   var whoLabel=state.who!=="all"?" · "+esc(memberName(state.who)):"";
@@ -412,7 +415,7 @@ function renderStats(){
 function openEntryModal(entry){
   var isEdit=!!entry;
   var form={ id:entry?entry.id:null, type:entry?entry.type:(state.fType==="all"?"film":state.fType),
-    title:entry?entry.title||"":"", year:entry?entry.year||"":"", memberId:entry?entry.memberId:state.active,
+    title:entry?entry.title||"":"", year:entry?entry.year||"":"", season:entry?entry.season||"":"", memberId:entry?entry.memberId:state.active,
     rating:entry?entry.rating||0:0, review:entry?entry.review||"":"", status:entry?entry.status||"done":"done", hasCover:entry?!!entry.hasCover:false };
   var coverValue=(entry&&entry.hasCover)?(state.covers[entry.id]||null):null; var coverChanged=false;
 
@@ -422,9 +425,11 @@ function openEntryModal(entry){
     '<label class="field__label">Type</label><div class="type-picker" id="typePick"></div>'+
     '<div class="row"><div class="field" style="flex:3"><label class="field__label">Titre</label><input class="input" id="fTitle" placeholder="Titre de l\'œuvre"></div>'+
       '<div class="field" style="flex:1"><label class="field__label">Année</label><input class="input" id="fYear" placeholder="2024" inputmode="numeric"></div></div>'+
+    '<div class="field" id="seasonField"><label class="field__label">Saison <span class="opt">(n° — séries et animes)</span></label><input class="input" id="fSeason" placeholder="1" inputmode="numeric"></div>'+
     '<label class="field__label">Statut</label><div class="type-picker" id="statusPick"></div>'+
     '<div class="field"><label class="field__label">Par qui</label><select class="input" id="fMemberSel"></select></div>'+
-      '<div class="field"><label class="field__label">Note sur 10 <span class="opt">(facultatif)</span></label><div class="notes-picker" id="notesPick"></div></div>'+
+      '<div class="field"><label class="field__label">Note sur 10 <span class="opt">(facultatif)</span></label><div class="notes-picker" id="notesPick"></div>'+
+        '<div class="note-extra"><button type="button" class="half-toggle" id="halfBtn">½ demi-point</button><span class="note-value" id="noteVal"></span><button type="button" class="clear-rating" id="clrNote" style="display:none">effacer</button></div></div>'+
     '<label class="field__label">Affiche / pochette <span class="opt">(facultatif)</span></label>'+
     '<div class="coverbox"><div class="coverbox__preview" id="coverPrev"></div>'+
       '<div class="coverbox__ctrl"><label class="ghost file-btn"><span id="fileLbl">Choisir une image</span><input type="file" accept="image/*" id="coverInput" hidden></label>'+
@@ -438,8 +443,13 @@ function openEntryModal(entry){
   var typePick=overlay.querySelector("#typePick");
   function drawTypes(){ typePick.innerHTML=""; TYPES.forEach(function(ty){ var b=document.createElement("button"); b.type="button"; b.className="type-opt"+(form.type===ty.id?" is-on":""); b.textContent=ty.icon+" "+ty.label;
     if(form.type===ty.id){ b.style.background=ty.color; b.style.borderColor=ty.color; b.style.color="#fff"; } else { b.style.color=ty.color; b.style.borderColor=ty.color; }
-    b.onclick=function(){ form.type=ty.id; setAccent(ty.color); drawTypes(); if(!coverValue) drawCover(); }; typePick.appendChild(b); }); }
+    b.onclick=function(){ form.type=ty.id; setAccent(ty.color); drawTypes(); updateSeasonVis(); if(!coverValue) drawCover(); }; typePick.appendChild(b); }); }
   drawTypes(); setAccent(typeMeta(form.type).color);
+
+  var seasonField=overlay.querySelector("#seasonField");
+  function hasSeason(){ return form.type==="serie"||form.type==="anime"; }
+  function updateSeasonVis(){ seasonField.style.display=hasSeason()?"":"none"; }
+  updateSeasonVis();
 
   var statusPick=overlay.querySelector("#statusPick");
   function drawStatus(){ statusPick.innerHTML=""; STATUSES.forEach(function(s){ var b=document.createElement("button"); b.type="button"; b.className="type-opt"+(form.status===s.id?" is-on":""); b.textContent=s.icon+" "+s.label;
@@ -449,20 +459,34 @@ function openEntryModal(entry){
 
   var tEl=overlay.querySelector("#fTitle"); tEl.value=form.title; tEl.oninput=function(e){ form.title=e.target.value; saveBtn.disabled=!form.title.trim(); };
   var yEl=overlay.querySelector("#fYear"); yEl.value=form.year; yEl.oninput=function(e){ form.year=e.target.value.replace(/[^0-9]/g,"").slice(0,4); yEl.value=form.year; };
+  var sEl=overlay.querySelector("#fSeason"); sEl.value=form.season||""; sEl.oninput=function(e){ form.season=e.target.value.replace(/[^0-9]/g,"").slice(0,3); sEl.value=form.season; };
   var mSel=overlay.querySelector("#fMemberSel"); state.members.forEach(function(m){ var o=document.createElement("option"); o.value=m.id; o.textContent=m.name; mSel.appendChild(o); });
   mSel.value=form.memberId||(state.members[0]&&state.members[0].id); form.memberId=mSel.value; mSel.onchange=function(){ form.memberId=mSel.value; };
   var rev=overlay.querySelector("#fReview"); rev.value=form.review; rev.oninput=function(e){ form.review=e.target.value; };
 
   var notesPick=overlay.querySelector("#notesPick");
+  var halfBtn=overlay.querySelector("#halfBtn"); var noteVal=overlay.querySelector("#noteVal"); var clrNote=overlay.querySelector("#clrNote");
+  function isHalf(){ return (form.rating - Math.floor(form.rating))===0.5; }
   function drawNotes(){
     notesPick.innerHTML="";
+    var base=Math.floor(form.rating);
     for(var n=1;n<=10;n++){ (function(n){
-      var b=document.createElement("button"); b.type="button"; b.className="note-opt"+(form.rating===n?" is-on":""); b.textContent=n;
-      b.onclick=function(){ form.rating=(form.rating===n?0:n); drawNotes(); };
+      var b=document.createElement("button"); b.type="button"; b.className="note-opt"+((form.rating>0&&base===n)?" is-on":""); b.textContent=n;
+      b.onclick=function(){
+        var half=isHalf();
+        if(form.rating>0 && Math.floor(form.rating)===n && !half){ form.rating=0; }
+        else { form.rating=Math.min(10, n + (half?0.5:0)); }
+        drawNotes();
+      };
       notesPick.appendChild(b);
     })(n); }
-    if(form.rating){ var clr=document.createElement("button"); clr.type="button"; clr.className="clear-rating"; clr.textContent="effacer"; clr.onclick=function(){ form.rating=0; drawNotes(); }; notesPick.appendChild(clr); }
+    halfBtn.classList.toggle("is-on", isHalf());
+    halfBtn.disabled = !(form.rating>=1);
+    noteVal.textContent = form.rating ? nfr(form.rating)+"/10" : "—";
+    clrNote.style.display = form.rating ? "" : "none";
   }
+  halfBtn.onclick=function(){ if(form.rating<1) return; form.rating = isHalf() ? Math.floor(form.rating) : Math.min(10, Math.floor(form.rating)+0.5); drawNotes(); };
+  clrNote.onclick=function(){ form.rating=0; drawNotes(); };
   drawNotes();
 
   var prev=overlay.querySelector("#coverPrev"); var coverClear=overlay.querySelector("#coverClear"); var fileLbl=overlay.querySelector("#fileLbl");
@@ -481,13 +505,14 @@ function openEntryModal(entry){
   saveBtn.onclick=function(){
     var title=form.title.trim(); if(!title) return;
     var id=form.id; var isNew=!(id&&state.entries.find(function(e){return e.id===id;})); if(isNew) id=uid();
-    var row={ id:id, type:form.type, title:title, year:form.year||null, member_id:form.memberId||null, rating:form.rating||0, review:form.review||null, status:form.status };
+    var seasonVal=(form.type==="serie"||form.type==="anime")?(form.season||null):null;
+    var row={ id:id, type:form.type, title:title, year:form.year||null, season:seasonVal, member_id:form.memberId||null, rating:form.rating||0, review:form.review||null, status:form.status };
     if(coverChanged) row.cover=coverValue||null;
     if(isNew) row.created_at=new Date().toISOString();
     saveBtn.disabled=true; saveBtn.textContent="Enregistrement…";
     db.from("entries").upsert(row).then(function(r){
       if(r.error){ flash("Erreur : "+r.error.message); saveBtn.disabled=false; saveBtn.textContent=isEdit?"Enregistrer":"Ajouter au catalogue"; return; }
-      var localEntry={ id:id, type:form.type, title:title, year:form.year||"", memberId:form.memberId, rating:form.rating||0, review:form.review||"", status:form.status,
+      var localEntry={ id:id, type:form.type, title:title, year:form.year||"", season:seasonVal||"", memberId:form.memberId, rating:form.rating||0, review:form.review||"", status:form.status,
         hasCover: coverChanged?!!coverValue:form.hasCover, createdAt: isNew?Date.now():(entry.createdAt||Date.now()) };
       var i=state.entries.findIndex(function(e){return e.id===id;}); if(i>=0) state.entries[i]=localEntry; else state.entries.unshift(localEntry);
       if(coverChanged){ if(coverValue) state.covers[id]=coverValue; else delete state.covers[id]; }
