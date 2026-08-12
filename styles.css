@@ -132,7 +132,7 @@ body{
 .bar{ background:var(--paper2); border-radius:20px; height:12px; overflow:hidden }
 .bar span{ display:block; height:100%; border-radius:20px }
 .brow__val{ font-weight:700; min-width:26px; text-align:right }
-.brow__avg{ color:var(--soft); font-size:12.5px; min-width:46px; text-align:right }
+.brow__avg{ color:var(--soft); font-size:12.5px; min-width:54px; text-align:right }
 .podium{ margin:0; padding:0; list-style:none; counter-reset:p }
 .podium li{ counter-increment:p; display:grid; grid-template-columns:auto auto 1fr auto auto; align-items:center; gap:10px; padding:8px 0; border-bottom:1px dashed var(--line) }
 .podium li:last-child{ border-bottom:none }
@@ -160,6 +160,12 @@ body{
 .rating-row{ display:flex; align-items:center; gap:10px; padding-top:2px; flex-wrap:wrap }
 .rating-val{ font-weight:600; font-size:15px; min-width:34px }
 .clear-rating{ border:none; background:transparent; color:var(--soft); font-size:12px; cursor:pointer; text-decoration:underline }
+.notes-picker{ display:flex; flex-wrap:wrap; gap:6px; align-items:center }
+.note-opt{ width:34px; height:34px; border:1.4px solid var(--line); background:#fff; border-radius:9px; font-family:inherit; font-weight:600; font-size:14px; cursor:pointer; color:var(--ink) }
+.note-opt:hover{ border-color:var(--soft) }
+.note-opt.is-on{ background:var(--ink); border-color:var(--ink); color:#fff }
+.note-badge{ display:inline-flex; align-items:baseline; gap:1px; font-family:'Fraunces',serif; font-weight:700; font-size:18px; color:var(--ink); background:var(--paper2); border-radius:9px; padding:2px 10px }
+.note-badge__out{ font-family:'Inter',sans-serif; font-weight:500; font-size:11px; color:var(--soft) }
 .coverbox{ display:flex; gap:14px; align-items:flex-start; margin-bottom:16px }
 .coverbox__preview{ width:96px; height:128px; border-radius:10px; overflow:hidden; display:grid; place-items:center; flex-shrink:0; border:1px solid var(--line) }
 .coverbox__preview img{ width:100%; height:100%; object-fit:contain }

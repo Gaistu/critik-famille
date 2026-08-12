@@ -145,7 +145,6 @@ function loadSettings(){ return db.from("settings").select("*").then(function(r)
 /* ================================ Init ================================= */
 init();
 function init(){
-  document.getElementById("importFile").addEventListener("change", handleImportFile);
   if(!window.supabase || !window.supabase.createClient){
     renderConfigNeeded("La librairie Supabase n'a pas pu être chargée. Une connexion internet est nécessaire pour ouvrir le catalogue.");
     return;
@@ -214,8 +213,6 @@ function renderApp(){
       '<div class="topbar__right">'+
         '<div class="whoami"><span class="whoami__label">C\'est toi&nbsp;:</span><div class="who-chips" id="whoChips"></div></div>'+
         '<button class="icon-btn" id="btnMembers" title="Membres de la famille">👥</button>'+
-        '<button class="icon-btn" id="btnExport" title="Exporter / sauvegarder">⬇</button>'+
-        '<button class="icon-btn" id="btnImport" title="Importer une sauvegarde">⬆</button>'+
       '</div>'+
     '</header>'+
     '<div class="viewtabs" id="viewtabs">'+
@@ -230,8 +227,6 @@ function renderApp(){
   ti.addEventListener("input",function(e){ state.title=e.target.value; updateSub(); });
   ti.addEventListener("blur",function(){ db.from("settings").upsert({key:"title",value:state.title}); });
   $("#btnMembers").onclick=openMembersModal;
-  $("#btnExport").onclick=doExport;
-  $("#btnImport").onclick=function(){ document.getElementById("importFile").click(); };
   [].forEach.call($("#viewtabs").querySelectorAll("button"),function(b){ b.onclick=function(){ state.view=b.dataset.view; renderContent(); }; });
   updateSub(); renderWhoami(); renderContent();
 }
@@ -311,7 +306,7 @@ function renderGrid(){
     var cover=e.hasCover&&state.covers[e.id]?'<div class="cover" style="background:'+t.color+'18"><img src="'+state.covers[e.id]+'" alt=""></div>':"";
     var badge=(e.status&&e.status!=="done")?'<span class="status-chip" style="color:'+st.color+';border-color:'+st.color+'">'+st.icon+' '+st.label+'</span>':"";
     var avatar=m?'<span class="avatar" style="background:'+m.color+'" title="'+esc(m.name)+'">'+esc(m.name.slice(0,1).toUpperCase())+'</span>':"";
-    var score=e.rating?'<span class="card__score">'+nfr(e.rating)+'/5</span>':'<span class="card__score card__score--none">non noté</span>';
+    var score=e.rating?'<span class="note-badge">'+nfr(e.rating)+'<span class="note-badge__out">/10</span></span>':'<span class="card__score card__score--none">non noté</span>';
     var review=e.review?'<p class="card__review">'+esc(e.review)+'</p>':"";
     var year=e.year?'<span class="card__year"> · '+esc(e.year)+'</span>':"";
     var card=document.createElement("article"); card.className="card"; card.style.setProperty("--c",t.color);
@@ -319,7 +314,7 @@ function renderGrid(){
       '<div class="card__top"><span class="pill" style="color:'+t.color+';border-color:'+t.color+'">'+t.icon+' '+t.label+'</span>'+
         '<div class="card__badges">'+badge+avatar+'</div></div>'+
       '<h3 class="card__title">'+esc(e.title)+year+'</h3>'+
-      '<div class="card__rating">'+starsHTML(e.rating,17)+' '+score+'</div>'+review+
+      '<div class="card__rating">'+score+'</div>'+review+
       '<div class="card__foot"><span>'+foot+'</span>'+
         '<span class="card__actions"><button data-act="edit" title="Modifier">✎</button><button data-act="del" title="Supprimer">🗑</button></span></div></div>';
     card.querySelector('[data-act="edit"]').onclick=function(){ openEntryModal(e); };
@@ -343,7 +338,7 @@ function renderCompact(){
     var badge=(e.status&&e.status!=="done")?'<span class="status-chip" style="color:'+st.color+';border-color:'+st.color+'">'+st.icon+' '+st.label+'</span>':"";
     var avatar=m?'<span class="avatar avatar--sm" style="background:'+m.color+'" title="'+esc(m.name)+'">'+esc(m.name.slice(0,1).toUpperCase())+'</span>':"";
     var year=e.year?'<span class="crow__year"> · '+esc(e.year)+'</span>':"";
-    var score=e.rating?'<span class="crow__score">'+starsHTML(e.rating,13)+' <b>'+nfr(e.rating)+'</b></span>':'<span class="crow__score crow__score--none">non noté</span>';
+    var score=e.rating?'<span class="crow__score"><b>'+nfr(e.rating)+'</b>/10</span>':'<span class="crow__score crow__score--none">non noté</span>';
     var row=document.createElement("div"); row.className="crow"; row.style.setProperty("--c",t.color);
     row.innerHTML=
       thumb+
@@ -391,7 +386,7 @@ function renderStats(){
   function inWho(e){ return state.who==="all"||e.memberId===state.who; }
   function podium(items){ return items.length===0?'<p class="muted">Aucune note pour l\'instant.</p>'
     :'<ol class="podium">'+items.map(function(e){ var t=typeMeta(e.type);
-      return '<li><span class="podium__dot" style="background:'+t.color+'">'+t.icon+'</span><span class="podium__title">'+esc(e.title)+'</span><span class="podium__by">'+esc(memberName(e.memberId))+'</span><span class="podium__rate">'+starsHTML(e.rating,13)+' <b>'+nfr(e.rating)+'</b></span></li>'; }).join("")+'</ol>'; }
+      return '<li><span class="podium__dot" style="background:'+t.color+'">'+t.icon+'</span><span class="podium__title">'+esc(e.title)+'</span><span class="podium__by">'+esc(memberName(e.memberId))+'</span><span class="podium__rate"><b>'+nfr(e.rating)+'</b>/10</span></li>'; }).join("")+'</ol>'; }
   var topAll=rated.filter(inWho).sort(function(a,b){return b.rating-a.rating||(b.createdAt||0)-(a.createdAt||0);}).slice(0,5);
   var topYear=thisYear.filter(function(e){return e.rating>0&&inWho(e);}).sort(function(a,b){return b.rating-a.rating||(b.createdAt||0)-(a.createdAt||0);}).slice(0,5);
   var whoLabel=state.who!=="all"?" · "+esc(memberName(state.who)):"";
@@ -399,13 +394,13 @@ function renderStats(){
     '<div class="bignums">'+
       '<div class="bignum"><span class="bignum__n">'+state.entries.length+'</span><span class="bignum__l">fiches au total</span></div>'+
       '<div class="bignum"><span class="bignum__n">'+thisYear.length+'</span><span class="bignum__l">ajoutées en '+year+'</span></div>'+
-      '<div class="bignum"><span class="bignum__n">'+(overallAvg?avg1(overallAvg):"—")+'</span><span class="bignum__l">note moyenne /5</span></div>'+
+      '<div class="bignum"><span class="bignum__n">'+(overallAvg?avg1(overallAvg):"—")+'</span><span class="bignum__l">note moyenne /10</span></div>'+
       '<div class="bignum"><span class="bignum__n">'+state.members.length+'</span><span class="bignum__l">membres</span></div>'+
     '</div>'+
     '<div class="stats-filter"><span>Palmarès par personne&nbsp;:</span><select class="select" id="whoSel"></select></div>'+
     '<div class="panels">'+
-      '<section class="panel"><h3 class="panel__h">Classement des membres</h3>'+perMember.map(function(p){ return '<div class="brow"><span class="brow__name"><span class="dot" style="background:'+p.color+'"></span>'+esc(p.name)+'</span><div class="bar"><span style="width:'+(p.count/maxMember*100)+'%;background:'+p.color+'"></span></div><span class="brow__val">'+p.count+'</span><span class="brow__avg">'+(p.avg?"★ "+avg1(p.avg):"—")+'</span></div>'; }).join("")+'</section>'+
-      '<section class="panel"><h3 class="panel__h">Répartition par type</h3>'+perType.map(function(t){ return '<div class="brow"><span class="brow__name">'+t.icon+' '+t.plural+'</span><div class="bar"><span style="width:'+(t.count/maxType*100)+'%;background:'+t.color+'"></span></div><span class="brow__val">'+t.count+'</span><span class="brow__avg">'+(t.avg?"★ "+avg1(t.avg):"—")+'</span></div>'; }).join("")+'</section>'+
+      '<section class="panel"><h3 class="panel__h">Classement des membres</h3>'+perMember.map(function(p){ return '<div class="brow"><span class="brow__name"><span class="dot" style="background:'+p.color+'"></span>'+esc(p.name)+'</span><div class="bar"><span style="width:'+(p.count/maxMember*100)+'%;background:'+p.color+'"></span></div><span class="brow__val">'+p.count+'</span><span class="brow__avg">'+(p.avg?avg1(p.avg)+"/10":"—")+'</span></div>'; }).join("")+'</section>'+
+      '<section class="panel"><h3 class="panel__h">Répartition par type</h3>'+perType.map(function(t){ return '<div class="brow"><span class="brow__name">'+t.icon+' '+t.plural+'</span><div class="bar"><span style="width:'+(t.count/maxType*100)+'%;background:'+t.color+'"></span></div><span class="brow__val">'+t.count+'</span><span class="brow__avg">'+(t.avg?avg1(t.avg)+"/10":"—")+'</span></div>'; }).join("")+'</section>'+
       '<section class="panel"><h3 class="panel__h">🏆 Mieux notées'+(state.who!=="all"?whoLabel:" — depuis toujours")+'</h3>'+podium(topAll)+'</section>'+
       '<section class="panel"><h3 class="panel__h">✨ Top de '+year+whoLabel+'</h3>'+podium(topYear)+'</section>'+
     '</div>';
@@ -428,8 +423,8 @@ function openEntryModal(entry){
     '<div class="row"><div class="field" style="flex:3"><label class="field__label">Titre</label><input class="input" id="fTitle" placeholder="Titre de l\'œuvre"></div>'+
       '<div class="field" style="flex:1"><label class="field__label">Année</label><input class="input" id="fYear" placeholder="2024" inputmode="numeric"></div></div>'+
     '<label class="field__label">Statut</label><div class="type-picker" id="statusPick"></div>'+
-    '<div class="row"><div class="field" style="flex:1"><label class="field__label">Par qui</label><select class="input" id="fMemberSel"></select></div>'+
-      '<div class="field" style="flex:1"><label class="field__label">Note</label><div class="rating-row"><span id="starMount"></span><span class="rating-val" id="ratingVal"></span><button class="clear-rating" id="clearRating">effacer</button></div></div></div>'+
+    '<div class="field"><label class="field__label">Par qui</label><select class="input" id="fMemberSel"></select></div>'+
+      '<div class="field"><label class="field__label">Note sur 10 <span class="opt">(facultatif)</span></label><div class="notes-picker" id="notesPick"></div></div>'+
     '<label class="field__label">Affiche / pochette <span class="opt">(facultatif)</span></label>'+
     '<div class="coverbox"><div class="coverbox__preview" id="coverPrev"></div>'+
       '<div class="coverbox__ctrl"><label class="ghost file-btn"><span id="fileLbl">Choisir une image</span><input type="file" accept="image/*" id="coverInput" hidden></label>'+
@@ -458,11 +453,17 @@ function openEntryModal(entry){
   mSel.value=form.memberId||(state.members[0]&&state.members[0].id); form.memberId=mSel.value; mSel.onchange=function(){ form.memberId=mSel.value; };
   var rev=overlay.querySelector("#fReview"); rev.value=form.review; rev.oninput=function(e){ form.review=e.target.value; };
 
-  var ratingVal=overlay.querySelector("#ratingVal"); var clearBtn=overlay.querySelector("#clearRating");
-  function updRating(){ ratingVal.textContent=form.rating?nfr(form.rating)+"/5":"—"; clearBtn.style.display=form.rating?"":"none"; }
-  var starMount=overlay.querySelector("#starMount"); starMount.appendChild(editableStars(form.rating,30,function(v){ form.rating=v; updRating(); }));
-  clearBtn.onclick=function(){ form.rating=0; starMount.innerHTML=""; starMount.appendChild(editableStars(0,30,function(v){ form.rating=v; updRating(); })); updRating(); };
-  updRating();
+  var notesPick=overlay.querySelector("#notesPick");
+  function drawNotes(){
+    notesPick.innerHTML="";
+    for(var n=1;n<=10;n++){ (function(n){
+      var b=document.createElement("button"); b.type="button"; b.className="note-opt"+(form.rating===n?" is-on":""); b.textContent=n;
+      b.onclick=function(){ form.rating=(form.rating===n?0:n); drawNotes(); };
+      notesPick.appendChild(b);
+    })(n); }
+    if(form.rating){ var clr=document.createElement("button"); clr.type="button"; clr.className="clear-rating"; clr.textContent="effacer"; clr.onclick=function(){ form.rating=0; drawNotes(); }; notesPick.appendChild(clr); }
+  }
+  drawNotes();
 
   var prev=overlay.querySelector("#coverPrev"); var coverClear=overlay.querySelector("#coverClear"); var fileLbl=overlay.querySelector("#fileLbl");
   function drawCover(){ var t=typeMeta(form.type);
