@@ -69,8 +69,8 @@ body{
 .card:hover{ transform:translateY(-3px); box-shadow:0 10px 24px rgba(30,20,10,.10) }
 .card__spine{ width:7px; background:var(--c); flex-shrink:0 }
 .card__body{ padding:15px 16px 13px; flex:1; min-width:0; display:flex; flex-direction:column }
-.cover{ margin:-15px -16px 12px; overflow:hidden; display:flex; justify-content:center; align-items:center }
-.cover img{ max-width:100%; max-height:240px; width:auto; height:auto; display:block }
+.cover{ margin:0 auto 12px; width:150px; height:210px; overflow:hidden; border-radius:10px; display:flex; justify-content:center; align-items:center }
+.cover img{ width:100%; height:100%; object-fit:cover; display:block }
 .card__top{ display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:9px }
 .card__badges{ display:flex; align-items:center; gap:6px }
 .pill{ border:1.4px solid; border-radius:20px; padding:3px 10px; font-size:12px; font-weight:600; white-space:nowrap }
