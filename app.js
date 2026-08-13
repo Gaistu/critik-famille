@@ -329,7 +329,7 @@ function entryCardEl(e){
       '<span class="card__actions"><button data-act="edit" title="Modifier">✎</button><button data-act="del" title="Supprimer">🗑</button></span></div></div>';
   card.querySelector('[data-act="edit"]').onclick=function(ev){ ev.stopPropagation(); openEntryModal(e); };
   card.querySelector('[data-act="del"]').onclick=function(ev){ ev.stopPropagation(); deleteEntry(e); };
-  card.addEventListener("click",function(){ openEntryModal(e); });
+  card.addEventListener("click",function(){ openDetailModal(e); });
   return card;
 }
 function groupsOf(list){
@@ -371,7 +371,7 @@ function entryRowEl(e){
       '<span class="crow__actions"><button data-act="edit" title="Modifier">✎</button><button data-act="del" title="Supprimer">🗑</button></span></span>';
   row.querySelector('[data-act="edit"]').onclick=function(ev){ ev.stopPropagation(); openEntryModal(e); };
   row.querySelector('[data-act="del"]').onclick=function(ev){ ev.stopPropagation(); deleteEntry(e); };
-  row.addEventListener("click",function(){ openEntryModal(e); });
+  row.addEventListener("click",function(){ openDetailModal(e); });
   return row;
 }
 function renderCompact(){
