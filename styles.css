@@ -173,12 +173,16 @@ body{
 .seasons-list{ display:flex; flex-direction:column; gap:10px; margin-bottom:10px }
 .season-row{ background:var(--paper2); border:1px solid var(--line); border-radius:12px; padding:10px }
 .season-row__head{ display:flex; align-items:center; gap:8px; margin-bottom:8px }
-.season-tag{ font-size:12px; font-weight:600; color:var(--soft); text-transform:uppercase; letter-spacing:.04em }
-.season-n{ width:56px; text-align:center }
+.season-tag{ font-size:12px; font-weight:700; color:#fff; background:var(--soft); border-radius:7px; padding:5px 10px; letter-spacing:.03em; white-space:nowrap }
+.season-tag--oav{ background:#9B4D96 }
+.season-tag--film{ background:#C0392B }
+.season-name{ margin:8px 0 0 }
+.season-n{ width:80px }
 .season-note{ width:96px }
 .season-del{ margin-left:auto }
 .season-rev{ min-height:52px }
-.season-add{ width:100% }
+.season-addrow{ display:flex; gap:8px; flex-wrap:wrap }
+.season-addrow .ghost{ flex:1; min-width:92px; text-align:center }
 .season-avg{ margin-top:9px; font-size:13px; color:var(--soft); font-weight:500 }
 .season-strip{ display:flex; flex-wrap:wrap; gap:5px; margin-bottom:11px }
 .season-chip{ font-size:11.5px; font-weight:600; color:var(--ink); background:var(--paper2); border:1px solid var(--line); border-radius:20px; padding:2px 8px }
