@@ -227,6 +227,23 @@ body{
 /* Sauvegardes */
 .bk-list{ display:flex; flex-direction:column; gap:8px; margin-top:6px }
 .bk-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:9px 12px; font-size:14px }
+
+/* Coups de cœur */
+.fav-btn{ border:none; background:transparent; cursor:pointer; font-size:17px; line-height:1; padding:1px 4px; border-radius:6px; color:#C0392B }
+.fav-btn:hover{ background:var(--paper2) }
+.fav-toggle{ border:1.4px solid var(--line); background:var(--field); border-radius:11px; padding:11px 14px; font-family:inherit; font-weight:600; font-size:14px; cursor:pointer; color:var(--ink) }
+.fav-toggle:hover{ border-color:var(--soft) }
+.fav-toggle.is-on{ background:#C0392B; border-color:#C0392B; color:#fff }
+
+/* Activité récente */
+.recent{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px 14px; margin-bottom:16px }
+.recent__h{ font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--soft); font-weight:600; margin:0 0 8px }
+.recent__list{ display:flex; flex-direction:column; gap:4px }
+.rfeed{ display:flex; align-items:center; gap:9px; font-size:13.5px; cursor:pointer; padding:4px 5px; border-radius:8px }
+.rfeed:hover{ background:var(--paper2) }
+.rfeed__av{ width:22px; height:22px; border-radius:50%; color:#fff; font-size:11px; font-weight:700; display:grid; place-items:center; flex-shrink:0 }
+.rfeed__txt{ flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.rfeed__time{ color:var(--soft); font-size:12px; flex-shrink:0 }
 .coverbox{ display:flex; gap:14px; align-items:flex-start; margin-bottom:16px }
 .coverbox__preview{ width:96px; height:128px; border-radius:10px; overflow:hidden; display:grid; place-items:center; flex-shrink:0; border:1px solid var(--line) }
 .coverbox__preview img{ width:100%; height:100%; object-fit:contain }
