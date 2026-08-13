@@ -29,6 +29,8 @@ function uid(){ return Math.random().toString(36).slice(2,10)+Date.now().toStrin
 function nfr(n){ return Number.isInteger(n) ? String(n) : String(n).replace(".",","); }
 function avg1(n){ return (Math.round(n*10)/10).toString().replace(".",","); }
 function noteOptionsHTML(selected){ var s='<option value="">—</option>'; for(var v=0.5; v<=10.0001; v+=0.5){ var vv=Math.round(v*10)/10; s+='<option value="'+vv+'"'+((selected&&Number(selected)===vv)?" selected":"")+'>'+nfr(vv)+'/10</option>'; } return s; }
+function seasonKind(s){ if(s&&s.kind) return s.kind; var n=String((s&&s.n)||""); if(/^\d+$/.test(n)) return "season"; if(/oav/i.test(n)) return "oav"; if(/film/i.test(n)) return "film"; return "season"; }
+function seasonsAverage(seasons){ var r=(seasons||[]).filter(function(s){ return seasonKind(s)==="season" && s.rating>0; }); return r.length? Math.round((r.reduce(function(a,s){return a+s.rating;},0)/r.length)*10)/10 : 0; }
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 function $(sel){ return document.querySelector(sel); }
 
@@ -313,7 +315,7 @@ function renderGrid(){
     var year=e.year?'<span class="card__year"> · '+esc(e.year)+'</span>':"";
     var isSer=(e.type==="serie"||e.type==="anime"); var seasons=Array.isArray(e.seasons)?e.seasons:[];
     var doneChip=(isSer&&e.status==="done")?'<span class="status-chip" style="color:#3F7A3A;border-color:#3F7A3A">✓ Terminée</span>':"";
-    var seasonStrip=(isSer&&seasons.length)?'<div class="season-strip">'+seasons.map(function(s){ return '<span class="season-chip">S'+esc(s.n)+(s.rating?'&nbsp;·&nbsp;'+nfr(s.rating):'')+'</span>'; }).join("")+'</div>':"";
+    var seasonStrip=(isSer&&seasons.length)?'<div class="season-strip">'+seasons.map(function(s){ var lab=/^\d+$/.test(String(s.n))?('S'+esc(s.n)):esc(s.n); return '<span class="season-chip">'+lab+(s.rating?'&nbsp;·&nbsp;'+nfr(s.rating):'')+'</span>'; }).join("")+'</div>':"";
     var card=document.createElement("article"); card.className="card"; card.style.setProperty("--c",t.color);
     card.innerHTML='<div class="card__spine"></div><div class="card__body">'+cover+
       '<div class="card__top"><span class="pill" style="color:'+t.color+';border-color:'+t.color+'">'+t.icon+' '+t.label+'</span>'+
@@ -482,32 +484,38 @@ function openEntryModal(entry){
 
   // Gestionnaire de saisons (séries/animes)
   var seasonsWrap=overlay.querySelector("#seasonsWrap");
-  function seasonAvg(){ var r=form.seasons.filter(function(s){return s.rating>0;}); return r.length? Math.round((r.reduce(function(a,s){return a+s.rating;},0)/r.length)*10)/10 : 0; }
+  function seasonAvg(){ return seasonsAverage(form.seasons); }
   function buildSeasons(){
     seasonsWrap.innerHTML='<label class="field__label">Saisons <span class="opt">(note et critique par saison)</span></label>';
     var list=document.createElement("div"); list.className="seasons-list";
     form.seasons.forEach(function(s,idx){
       var row=document.createElement("div"); row.className="season-row";
       row.innerHTML=
-        '<div class="season-row__head"><span class="season-tag">Saison</span>'+
-          '<input class="input season-n" value="'+esc(s.n)+'" inputmode="numeric">'+
+        '<div class="season-row__head">'+
+          '<input class="input season-n" value="'+esc(s.n)+'" placeholder="1 / OAV / Film">'+
           '<select class="input season-note">'+noteOptionsHTML(s.rating)+'</select>'+
           '<button type="button" class="x small season-del" title="Retirer">✕</button></div>'+
-        '<textarea class="input textarea season-rev" rows="2" placeholder="Critique de cette saison…">'+esc(s.review||"")+'</textarea>';
-      var nEl=row.querySelector(".season-n"); nEl.oninput=function(e){ s.n=e.target.value.replace(/[^0-9]/g,"").slice(0,3); nEl.value=s.n; };
+        '<textarea class="input textarea season-rev" rows="2" placeholder="Critique de cette saison / cet élément…">'+esc(s.review||"")+'</textarea>';
+      var nEl=row.querySelector(".season-n"); nEl.oninput=function(e){ s.n=e.target.value.slice(0,12); };
       row.querySelector(".season-note").onchange=function(e){ s.rating=e.target.value?parseFloat(e.target.value):0; updateAvg(); };
       row.querySelector(".season-rev").oninput=function(e){ s.review=e.target.value; };
       row.querySelector(".season-del").onclick=function(){ form.seasons.splice(idx,1); buildSeasons(); };
       list.appendChild(row);
     });
     seasonsWrap.appendChild(list);
-    var add=document.createElement("button"); add.type="button"; add.className="ghost season-add"; add.textContent="+ Ajouter une saison";
-    add.onclick=function(){ form.seasons.push({n:String(form.seasons.length+1),rating:0,review:""}); buildSeasons(); };
-    seasonsWrap.appendChild(add);
+    function nextNum(){ var c=0; form.seasons.forEach(function(s){ if(seasonKind(s)==="season") c++; }); return String(c+1); }
+    function mkAdd(label, make){ var b=document.createElement("button"); b.type="button"; b.className="ghost"; b.textContent=label; b.onclick=function(){ form.seasons.push(make()); buildSeasons(); }; return b; }
+    var addRow=document.createElement("div"); addRow.className="season-addrow";
+    addRow.appendChild(mkAdd("+ Saison", function(){ return {n:nextNum(),rating:0,review:"",kind:"season"}; }));
+    if(form.type==="anime"){
+      addRow.appendChild(mkAdd("+ OAV", function(){ return {n:"OAV",rating:0,review:"",kind:"oav"}; }));
+      addRow.appendChild(mkAdd("+ Film", function(){ return {n:"Film",rating:0,review:"",kind:"film"}; }));
+    }
+    seasonsWrap.appendChild(addRow);
     var avgLine=document.createElement("div"); avgLine.className="season-avg"; avgLine.id="seasonAvg"; seasonsWrap.appendChild(avgLine);
     updateAvg();
   }
-  function updateAvg(){ var el=overlay.querySelector("#seasonAvg"); if(!el) return; var a=seasonAvg(); el.textContent=a?("Note de la série (moyenne des saisons) : "+avg1(a)+"/10"):"Ajoute des notes de saison pour obtenir la moyenne."; }
+  function updateAvg(){ var el=overlay.querySelector("#seasonAvg"); if(!el) return; var a=seasonAvg(); el.textContent=a?("Note "+(form.type==="anime"?"de l'anime":"de la série")+" (moyenne des saisons) : "+avg1(a)+"/10"):"Ajoute des notes de saison pour obtenir la moyenne."; }
 
   function updateTypeUI(){
     var series=isSeries();
@@ -537,10 +545,8 @@ function openEntryModal(entry){
     var title=form.title.trim(); if(!title) return;
     var id=form.id; var isNew=!(id&&state.entries.find(function(e){return e.id===id;})); if(isNew) id=uid();
     var series=isSeries();
-    var seasonsClean = series ? form.seasons.map(function(s){ return {n:(s.n||"").toString(), rating:s.rating||0, review:(s.review||"")}; }).filter(function(s){ return s.n || s.rating || s.review; }) : [];
-    var ratingVal;
-    if(series){ var rr=seasonsClean.filter(function(s){return s.rating>0;}); ratingVal = rr.length? Math.round((rr.reduce(function(a,s){return a+s.rating;},0)/rr.length)*10)/10 : 0; }
-    else ratingVal = form.rating||0;
+    var seasonsClean = series ? form.seasons.map(function(s){ return {n:(s.n||"").toString(), rating:s.rating||0, review:(s.review||""), kind:seasonKind(s)}; }).filter(function(s){ return s.n || s.rating || s.review; }) : [];
+    var ratingVal = series ? seasonsAverage(seasonsClean) : (form.rating||0);
     var row={ id:id, type:form.type, title:title, year:form.year||null, member_id:form.memberId||null, rating:ratingVal, review:form.review||null, status:form.status, seasons: series?seasonsClean:null };
     if(coverChanged) row.cover=coverValue||null;
     if(isNew) row.created_at=new Date().toISOString();
