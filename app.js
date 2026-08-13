@@ -28,6 +28,7 @@ function statusMeta(id){ return STATUSES.find(function(s){return s.id===id;}) ||
 function uid(){ return Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4); }
 function nfr(n){ return Number.isInteger(n) ? String(n) : String(n).replace(".",","); }
 function avg1(n){ return (Math.round(n*10)/10).toString().replace(".",","); }
+function noteOptionsHTML(selected){ var s='<option value="">—</option>'; for(var v=0.5; v<=10.0001; v+=0.5){ var vv=Math.round(v*10)/10; s+='<option value="'+vv+'"'+((selected&&Number(selected)===vv)?" selected":"")+'>'+nfr(vv)+'/10</option>'; } return s; }
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 function $(sel){ return document.querySelector(sel); }
 
@@ -64,6 +65,7 @@ var SETUP_SQL =
 "  title text not null,\n"+
 "  year text,\n"+
 "  season text,\n"+
+"  seasons jsonb,\n"+
 "  member_id text,\n"+
 "  rating numeric default 0,\n"+
 "  review text,\n"+
@@ -125,7 +127,7 @@ function editableStars(value,size,onChange){
 
 /* ============================== Data layer ============================= */
 function rowToEntry(r){
-  return { id:r.id, type:r.type, title:r.title, year:r.year||"", season:r.season||"", memberId:r.member_id,
+  return { id:r.id, type:r.type, title:r.title, year:r.year||"", season:r.season||"", seasons:(Array.isArray(r.seasons)?r.seasons:[]), memberId:r.member_id,
     rating:Number(r.rating)||0, review:r.review||"", status:r.status||"done",
     hasCover:!!r.cover, createdAt:r.created_at?new Date(r.created_at).getTime():0 };
 }
@@ -308,15 +310,16 @@ function renderGrid(){
     var badge=(e.status&&e.status!=="done")?'<span class="status-chip" style="color:'+st.color+';border-color:'+st.color+'">'+st.icon+' '+st.label+'</span>':"";
     var avatar=m?'<span class="avatar" style="background:'+m.color+'" title="'+esc(m.name)+'">'+esc(m.name.slice(0,1).toUpperCase())+'</span>':"";
     var score=e.rating?'<span class="note-badge">'+nfr(e.rating)+'<span class="note-badge__out">/10</span></span>':'<span class="card__score card__score--none">non noté</span>';
-    var review=e.review?'<p class="card__review">'+esc(e.review)+'</p>':"";
     var year=e.year?'<span class="card__year"> · '+esc(e.year)+'</span>':"";
-    var season=(e.season&&(e.type==="serie"||e.type==="anime"))?'<span class="card__year"> · Saison '+esc(e.season)+'</span>':"";
+    var isSer=(e.type==="serie"||e.type==="anime"); var seasons=Array.isArray(e.seasons)?e.seasons:[];
+    var doneChip=(isSer&&e.status==="done")?'<span class="status-chip" style="color:#3F7A3A;border-color:#3F7A3A">✓ Terminée</span>':"";
+    var seasonStrip=(isSer&&seasons.length)?'<div class="season-strip">'+seasons.map(function(s){ return '<span class="season-chip">S'+esc(s.n)+(s.rating?'&nbsp;·&nbsp;'+nfr(s.rating):'')+'</span>'; }).join("")+'</div>':"";
     var card=document.createElement("article"); card.className="card"; card.style.setProperty("--c",t.color);
     card.innerHTML='<div class="card__spine"></div><div class="card__body">'+cover+
       '<div class="card__top"><span class="pill" style="color:'+t.color+';border-color:'+t.color+'">'+t.icon+' '+t.label+'</span>'+
-        '<div class="card__badges">'+badge+avatar+'</div></div>'+
-      '<h3 class="card__title">'+esc(e.title)+season+year+'</h3>'+
-      '<div class="card__rating">'+score+'</div>'+review+
+        '<div class="card__badges">'+badge+doneChip+avatar+'</div></div>'+
+      '<h3 class="card__title">'+esc(e.title)+year+'</h3>'+
+      '<div class="card__rating">'+score+'</div>'+seasonStrip+
       '<div class="card__foot"><span>'+foot+'</span>'+
         '<span class="card__actions"><button data-act="edit" title="Modifier">✎</button><button data-act="del" title="Supprimer">🗑</button></span></div></div>';
     card.querySelector('[data-act="edit"]').onclick=function(){ openEntryModal(e); };
@@ -340,7 +343,7 @@ function renderCompact(){
     var badge=(e.status&&e.status!=="done")?'<span class="status-chip" style="color:'+st.color+';border-color:'+st.color+'">'+st.icon+' '+st.label+'</span>':"";
     var avatar=m?'<span class="avatar avatar--sm" style="background:'+m.color+'" title="'+esc(m.name)+'">'+esc(m.name.slice(0,1).toUpperCase())+'</span>':"";
     var year=e.year?'<span class="crow__year"> · '+esc(e.year)+'</span>':"";
-    var season=(e.season&&(e.type==="serie"||e.type==="anime"))?'<span class="crow__year"> · S'+esc(e.season)+'</span>':"";
+    var season=((e.type==="serie"||e.type==="anime")&&Array.isArray(e.seasons)&&e.seasons.length)?'<span class="crow__year"> · '+e.seasons.length+' saison'+(e.seasons.length>1?'s':'')+'</span>':"";
     var score=e.rating?'<span class="crow__score"><b>'+nfr(e.rating)+'</b>/10</span>':'<span class="crow__score crow__score--none">non noté</span>';
     var row=document.createElement("div"); row.className="crow"; row.style.setProperty("--c",t.color);
     row.innerHTML=
@@ -388,8 +391,8 @@ function renderStats(){
   var maxType=Math.max.apply(null,[1].concat(perType.map(function(t){return t.count;})));
   function inWho(e){ return state.who==="all"||e.memberId===state.who; }
   function podium(items){ return items.length===0?'<p class="muted">Aucune note pour l\'instant.</p>'
-    :'<ol class="podium">'+items.map(function(e){ var t=typeMeta(e.type); var sea=(e.season&&(e.type==="serie"||e.type==="anime"))?" · S"+esc(e.season):"";
-      return '<li><span class="podium__dot" style="background:'+t.color+'">'+t.icon+'</span><span class="podium__title">'+esc(e.title)+sea+'</span><span class="podium__by">'+esc(memberName(e.memberId))+'</span><span class="podium__rate"><b>'+nfr(e.rating)+'</b>/10</span></li>'; }).join("")+'</ol>'; }
+    :'<ol class="podium">'+items.map(function(e){ var t=typeMeta(e.type);
+      return '<li><span class="podium__dot" style="background:'+t.color+'">'+t.icon+'</span><span class="podium__title">'+esc(e.title)+'</span><span class="podium__by">'+esc(memberName(e.memberId))+'</span><span class="podium__rate"><b>'+nfr(e.rating)+'</b>/10</span></li>'; }).join("")+'</ol>'; }
   var topAll=rated.filter(inWho).sort(function(a,b){return b.rating-a.rating||(b.createdAt||0)-(a.createdAt||0);}).slice(0,5);
   var topYear=thisYear.filter(function(e){return e.rating>0&&inWho(e);}).sort(function(a,b){return b.rating-a.rating||(b.createdAt||0)-(a.createdAt||0);}).slice(0,5);
   var whoLabel=state.who!=="all"?" · "+esc(memberName(state.who)):"";
@@ -415,8 +418,9 @@ function renderStats(){
 function openEntryModal(entry){
   var isEdit=!!entry;
   var form={ id:entry?entry.id:null, type:entry?entry.type:(state.fType==="all"?"film":state.fType),
-    title:entry?entry.title||"":"", year:entry?entry.year||"":"", season:entry?entry.season||"":"", memberId:entry?entry.memberId:state.active,
-    rating:entry?entry.rating||0:0, review:entry?entry.review||"":"", status:entry?entry.status||"done":"done", hasCover:entry?!!entry.hasCover:false };
+    title:entry?entry.title||"":"", year:entry?entry.year||"":"", memberId:entry?entry.memberId:state.active,
+    rating:entry?entry.rating||0:0, review:entry?entry.review||"":"", status:entry?entry.status||"done":"done", hasCover:entry?!!entry.hasCover:false,
+    seasons:(entry&&Array.isArray(entry.seasons))?entry.seasons.map(function(s){return {n:s.n,rating:s.rating,review:s.review};}):[] };
   var coverValue=(entry&&entry.hasCover)?(state.covers[entry.id]||null):null; var coverChanged=false;
 
   var overlay=document.createElement("div"); overlay.className="overlay";
@@ -425,17 +429,17 @@ function openEntryModal(entry){
     '<label class="field__label">Type</label><div class="type-picker" id="typePick"></div>'+
     '<div class="row"><div class="field" style="flex:3"><label class="field__label">Titre</label><input class="input" id="fTitle" placeholder="Titre de l\'œuvre"></div>'+
       '<div class="field" style="flex:1"><label class="field__label">Année</label><input class="input" id="fYear" placeholder="2024" inputmode="numeric"></div></div>'+
-    '<div class="field" id="seasonField"><label class="field__label">Saison <span class="opt">(n° — séries et animes)</span></label><input class="input" id="fSeason" placeholder="1" inputmode="numeric"></div>'+
-    '<label class="field__label">Statut</label><div class="type-picker" id="statusPick"></div>'+
+    '<div class="field" id="statusField"><label class="field__label">Statut</label><div class="type-picker" id="statusPick"></div></div>'+
+    '<div class="field" id="finishedField"><label class="field__label">Diffusion</label><button type="button" class="toggle-btn" id="finishedBtn"></button></div>'+
     '<div class="field"><label class="field__label">Par qui</label><select class="input" id="fMemberSel"></select></div>'+
-      '<div class="field"><label class="field__label">Note sur 10 <span class="opt">(facultatif)</span></label><div class="notes-picker" id="notesPick"></div>'+
-        '<div class="note-extra"><button type="button" class="half-toggle" id="halfBtn">½ demi-point</button><span class="note-value" id="noteVal"></span><button type="button" class="clear-rating" id="clrNote" style="display:none">effacer</button></div></div>'+
+    '<div class="field" id="noteField"><label class="field__label">Note sur 10 <span class="opt">(facultatif)</span></label><select class="input" id="noteSel"></select></div>'+
+    '<div id="seasonsWrap" class="seasons-wrap"></div>'+
     '<label class="field__label">Affiche / pochette <span class="opt">(facultatif)</span></label>'+
     '<div class="coverbox"><div class="coverbox__preview" id="coverPrev"></div>'+
       '<div class="coverbox__ctrl"><label class="ghost file-btn"><span id="fileLbl">Choisir une image</span><input type="file" accept="image/*" id="coverInput" hidden></label>'+
         '<button class="clear-rating" id="coverClear" style="display:none">retirer l\'image</button>'+
         '<p class="tiny">L\'image est réduite automatiquement pour l\'enregistrement.</p></div></div>'+
-    '<div class="field"><label class="field__label">Critique</label><textarea class="input textarea" id="fReview" rows="4" placeholder="Ton avis, un mot, un ressenti…"></textarea></div>'+
+    '<div class="field"><label class="field__label" id="reviewLabel">Critique</label><textarea class="input textarea" id="fReview" rows="4" placeholder="Ton avis, un mot, un ressenti…"></textarea></div>'+
     '<div class="modal__foot"><button class="ghost" data-x>Annuler</button><button class="add-btn" id="saveBtn">'+(isEdit?"Enregistrer":"Ajouter au catalogue")+'</button></div></div>';
   document.body.appendChild(overlay);
   var modal=overlay.querySelector(".modal"); function setAccent(c){ modal.style.setProperty("--c",c); }
@@ -443,51 +447,78 @@ function openEntryModal(entry){
   var typePick=overlay.querySelector("#typePick");
   function drawTypes(){ typePick.innerHTML=""; TYPES.forEach(function(ty){ var b=document.createElement("button"); b.type="button"; b.className="type-opt"+(form.type===ty.id?" is-on":""); b.textContent=ty.icon+" "+ty.label;
     if(form.type===ty.id){ b.style.background=ty.color; b.style.borderColor=ty.color; b.style.color="#fff"; } else { b.style.color=ty.color; b.style.borderColor=ty.color; }
-    b.onclick=function(){ form.type=ty.id; setAccent(ty.color); drawTypes(); updateSeasonVis(); if(!coverValue) drawCover(); }; typePick.appendChild(b); }); }
+    b.onclick=function(){ form.type=ty.id; setAccent(ty.color); drawTypes(); updateTypeUI(); if(!coverValue) drawCover(); }; typePick.appendChild(b); }); }
   drawTypes(); setAccent(typeMeta(form.type).color);
 
-  var seasonField=overlay.querySelector("#seasonField");
-  function hasSeason(){ return form.type==="serie"||form.type==="anime"; }
-  function updateSeasonVis(){ seasonField.style.display=hasSeason()?"":"none"; }
-  updateSeasonVis();
+  function isSeries(){ return form.type==="serie"||form.type==="anime"; }
 
+  // Statut (types simples)
+  var statusField=overlay.querySelector("#statusField");
   var statusPick=overlay.querySelector("#statusPick");
   function drawStatus(){ statusPick.innerHTML=""; STATUSES.forEach(function(s){ var b=document.createElement("button"); b.type="button"; b.className="type-opt"+(form.status===s.id?" is-on":""); b.textContent=s.icon+" "+s.label;
     if(form.status===s.id){ b.style.background=s.color; b.style.borderColor=s.color; b.style.color="#fff"; } else { b.style.color=s.color; b.style.borderColor=s.color; }
     b.onclick=function(){ form.status=s.id; drawStatus(); }; statusPick.appendChild(b); }); }
   drawStatus();
 
+  // Série terminée (séries/animes) : pilote le statut done/doing
+  var finishedField=overlay.querySelector("#finishedField");
+  var finishedBtn=overlay.querySelector("#finishedBtn");
+  function drawFinished(){ var on=form.status==="done"; finishedBtn.className="toggle-btn"+(on?" is-on":""); finishedBtn.textContent=on?"✓ Série terminée":"Série en cours de diffusion"; }
+  finishedBtn.onclick=function(){ form.status=(form.status==="done")?"doing":"done"; drawFinished(); };
+  drawFinished();
+
   var tEl=overlay.querySelector("#fTitle"); tEl.value=form.title; tEl.oninput=function(e){ form.title=e.target.value; saveBtn.disabled=!form.title.trim(); };
   var yEl=overlay.querySelector("#fYear"); yEl.value=form.year; yEl.oninput=function(e){ form.year=e.target.value.replace(/[^0-9]/g,"").slice(0,4); yEl.value=form.year; };
-  var sEl=overlay.querySelector("#fSeason"); sEl.value=form.season||""; sEl.oninput=function(e){ form.season=e.target.value.replace(/[^0-9]/g,"").slice(0,3); sEl.value=form.season; };
   var mSel=overlay.querySelector("#fMemberSel"); state.members.forEach(function(m){ var o=document.createElement("option"); o.value=m.id; o.textContent=m.name; mSel.appendChild(o); });
   mSel.value=form.memberId||(state.members[0]&&state.members[0].id); form.memberId=mSel.value; mSel.onchange=function(){ form.memberId=mSel.value; };
   var rev=overlay.querySelector("#fReview"); rev.value=form.review; rev.oninput=function(e){ form.review=e.target.value; };
+  var reviewLabel=overlay.querySelector("#reviewLabel");
 
-  var notesPick=overlay.querySelector("#notesPick");
-  var halfBtn=overlay.querySelector("#halfBtn"); var noteVal=overlay.querySelector("#noteVal"); var clrNote=overlay.querySelector("#clrNote");
-  function isHalf(){ return (form.rating - Math.floor(form.rating))===0.5; }
-  function drawNotes(){
-    notesPick.innerHTML="";
-    var base=Math.floor(form.rating);
-    for(var n=1;n<=10;n++){ (function(n){
-      var b=document.createElement("button"); b.type="button"; b.className="note-opt"+((form.rating>0&&base===n)?" is-on":""); b.textContent=n;
-      b.onclick=function(){
-        var half=isHalf();
-        if(form.rating>0 && Math.floor(form.rating)===n && !half){ form.rating=0; }
-        else { form.rating=Math.min(10, n + (half?0.5:0)); }
-        drawNotes();
-      };
-      notesPick.appendChild(b);
-    })(n); }
-    halfBtn.classList.toggle("is-on", isHalf());
-    halfBtn.disabled = !(form.rating>=1);
-    noteVal.textContent = form.rating ? nfr(form.rating)+"/10" : "—";
-    clrNote.style.display = form.rating ? "" : "none";
+  // Note simple (menu déroulant)
+  var noteField=overlay.querySelector("#noteField");
+  var noteSel=overlay.querySelector("#noteSel");
+  noteSel.innerHTML=noteOptionsHTML(form.rating);
+  noteSel.onchange=function(){ form.rating=noteSel.value?parseFloat(noteSel.value):0; };
+
+  // Gestionnaire de saisons (séries/animes)
+  var seasonsWrap=overlay.querySelector("#seasonsWrap");
+  function seasonAvg(){ var r=form.seasons.filter(function(s){return s.rating>0;}); return r.length? Math.round((r.reduce(function(a,s){return a+s.rating;},0)/r.length)*10)/10 : 0; }
+  function buildSeasons(){
+    seasonsWrap.innerHTML='<label class="field__label">Saisons <span class="opt">(note et critique par saison)</span></label>';
+    var list=document.createElement("div"); list.className="seasons-list";
+    form.seasons.forEach(function(s,idx){
+      var row=document.createElement("div"); row.className="season-row";
+      row.innerHTML=
+        '<div class="season-row__head"><span class="season-tag">Saison</span>'+
+          '<input class="input season-n" value="'+esc(s.n)+'" inputmode="numeric">'+
+          '<select class="input season-note">'+noteOptionsHTML(s.rating)+'</select>'+
+          '<button type="button" class="x small season-del" title="Retirer">✕</button></div>'+
+        '<textarea class="input textarea season-rev" rows="2" placeholder="Critique de cette saison…">'+esc(s.review||"")+'</textarea>';
+      var nEl=row.querySelector(".season-n"); nEl.oninput=function(e){ s.n=e.target.value.replace(/[^0-9]/g,"").slice(0,3); nEl.value=s.n; };
+      row.querySelector(".season-note").onchange=function(e){ s.rating=e.target.value?parseFloat(e.target.value):0; updateAvg(); };
+      row.querySelector(".season-rev").oninput=function(e){ s.review=e.target.value; };
+      row.querySelector(".season-del").onclick=function(){ form.seasons.splice(idx,1); buildSeasons(); };
+      list.appendChild(row);
+    });
+    seasonsWrap.appendChild(list);
+    var add=document.createElement("button"); add.type="button"; add.className="ghost season-add"; add.textContent="+ Ajouter une saison";
+    add.onclick=function(){ form.seasons.push({n:String(form.seasons.length+1),rating:0,review:""}); buildSeasons(); };
+    seasonsWrap.appendChild(add);
+    var avgLine=document.createElement("div"); avgLine.className="season-avg"; avgLine.id="seasonAvg"; seasonsWrap.appendChild(avgLine);
+    updateAvg();
   }
-  halfBtn.onclick=function(){ if(form.rating<1) return; form.rating = isHalf() ? Math.floor(form.rating) : Math.min(10, Math.floor(form.rating)+0.5); drawNotes(); };
-  clrNote.onclick=function(){ form.rating=0; drawNotes(); };
-  drawNotes();
+  function updateAvg(){ var el=overlay.querySelector("#seasonAvg"); if(!el) return; var a=seasonAvg(); el.textContent=a?("Note de la série (moyenne des saisons) : "+avg1(a)+"/10"):"Ajoute des notes de saison pour obtenir la moyenne."; }
+
+  function updateTypeUI(){
+    var series=isSeries();
+    statusField.style.display=series?"none":"";
+    finishedField.style.display=series?"":"none";
+    noteField.style.display=series?"none":"";
+    seasonsWrap.style.display=series?"":"none";
+    reviewLabel.textContent=series?"Critique globale (facultatif)":"Critique";
+    if(series) buildSeasons();
+  }
+  updateTypeUI();
 
   var prev=overlay.querySelector("#coverPrev"); var coverClear=overlay.querySelector("#coverClear"); var fileLbl=overlay.querySelector("#fileLbl");
   function drawCover(){ var t=typeMeta(form.type);
@@ -505,14 +536,18 @@ function openEntryModal(entry){
   saveBtn.onclick=function(){
     var title=form.title.trim(); if(!title) return;
     var id=form.id; var isNew=!(id&&state.entries.find(function(e){return e.id===id;})); if(isNew) id=uid();
-    var seasonVal=(form.type==="serie"||form.type==="anime")?(form.season||null):null;
-    var row={ id:id, type:form.type, title:title, year:form.year||null, season:seasonVal, member_id:form.memberId||null, rating:form.rating||0, review:form.review||null, status:form.status };
+    var series=isSeries();
+    var seasonsClean = series ? form.seasons.map(function(s){ return {n:(s.n||"").toString(), rating:s.rating||0, review:(s.review||"")}; }).filter(function(s){ return s.n || s.rating || s.review; }) : [];
+    var ratingVal;
+    if(series){ var rr=seasonsClean.filter(function(s){return s.rating>0;}); ratingVal = rr.length? Math.round((rr.reduce(function(a,s){return a+s.rating;},0)/rr.length)*10)/10 : 0; }
+    else ratingVal = form.rating||0;
+    var row={ id:id, type:form.type, title:title, year:form.year||null, member_id:form.memberId||null, rating:ratingVal, review:form.review||null, status:form.status, seasons: series?seasonsClean:null };
     if(coverChanged) row.cover=coverValue||null;
     if(isNew) row.created_at=new Date().toISOString();
     saveBtn.disabled=true; saveBtn.textContent="Enregistrement…";
     db.from("entries").upsert(row).then(function(r){
       if(r.error){ flash("Erreur : "+r.error.message); saveBtn.disabled=false; saveBtn.textContent=isEdit?"Enregistrer":"Ajouter au catalogue"; return; }
-      var localEntry={ id:id, type:form.type, title:title, year:form.year||"", season:seasonVal||"", memberId:form.memberId, rating:form.rating||0, review:form.review||"", status:form.status,
+      var localEntry={ id:id, type:form.type, title:title, year:form.year||"", seasons:series?seasonsClean:[], memberId:form.memberId, rating:ratingVal, review:form.review||"", status:form.status,
         hasCover: coverChanged?!!coverValue:form.hasCover, createdAt: isNew?Date.now():(entry.createdAt||Date.now()) };
       var i=state.entries.findIndex(function(e){return e.id===id;}); if(i>=0) state.entries[i]=localEntry; else state.entries.unshift(localEntry);
       if(coverChanged){ if(coverValue) state.covers[id]=coverValue; else delete state.covers[id]; }
