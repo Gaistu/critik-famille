@@ -43,7 +43,7 @@ var LSraw = {
 /* =============================== État ================================== */
 var state = {
   title:"Critik Famille", members:[], entries:[], covers:{},
-  active:null, view:"catalogue",
+  active:null, view:"catalogue", theme:"light",
   fType:"all", fStatus:"all", fMember:"all", query:"", sort:"recent", who:"all", group:"none",
 };
 var db = null;
@@ -93,6 +93,8 @@ function flash(msg){
   if(!b){ b=document.createElement("div"); b.id="banner"; b.className="banner"; document.body.appendChild(b); }
   b.textContent=msg; clearTimeout(bannerTimer); bannerTimer=setTimeout(function(){ b.remove(); },3200);
 }
+function applyTheme(mode){ if(mode!=="dark") mode="light"; state.theme=mode; document.body.classList.toggle("dark", mode==="dark"); LSraw.set("cat_theme",mode); var b=$("#btnTheme"); if(b) b.textContent=(mode==="dark"?"☀️":"🌙"); }
+function toggleTheme(){ applyTheme(state.theme==="dark"?"light":"dark"); }
 
 /* ============================ Compression image ========================= */
 function fileToThumb(file, maxDim, quality){
@@ -150,6 +152,7 @@ function loadSettings(){ return db.from("settings").select("*").then(function(r)
 /* ================================ Init ================================= */
 init();
 function init(){
+  applyTheme(LSraw.get("cat_theme","light"));
   if(!window.supabase || !window.supabase.createClient){
     renderConfigNeeded("La librairie Supabase n'a pas pu être chargée. Une connexion internet est nécessaire pour ouvrir le catalogue.");
     return;
@@ -217,6 +220,7 @@ function renderApp(){
           '<div class="brand__sub" id="subLine"></div></div></div>'+
       '<div class="topbar__right">'+
         '<div class="whoami"><span class="whoami__label">C\'est toi&nbsp;:</span><div class="who-chips" id="whoChips"></div></div>'+
+        '<button class="icon-btn" id="btnTheme" title="Thème clair / sombre">🌙</button>'+
         '<button class="icon-btn" id="btnMembers" title="Membres de la famille">👥</button>'+
       '</div>'+
     '</header>'+
@@ -232,6 +236,7 @@ function renderApp(){
   ti.addEventListener("input",function(e){ state.title=e.target.value; updateSub(); });
   ti.addEventListener("blur",function(){ db.from("settings").upsert({key:"title",value:state.title}); });
   $("#btnMembers").onclick=openMembersModal;
+  var tb=$("#btnTheme"); if(tb){ tb.textContent=(state.theme==="dark"?"☀️":"🌙"); tb.onclick=toggleTheme; }
   var bkl=$("#backupLink"); if(bkl) bkl.onclick=openBackupModal;
   [].forEach.call($("#viewtabs").querySelectorAll("button"),function(b){ b.onclick=function(){ state.view=b.dataset.view; renderContent(); }; });
   updateSub(); renderWhoami(); renderContent();
@@ -324,7 +329,7 @@ function entryCardEl(e){
       '<span class="card__actions"><button data-act="edit" title="Modifier">✎</button><button data-act="del" title="Supprimer">🗑</button></span></div></div>';
   card.querySelector('[data-act="edit"]').onclick=function(ev){ ev.stopPropagation(); openEntryModal(e); };
   card.querySelector('[data-act="del"]').onclick=function(ev){ ev.stopPropagation(); deleteEntry(e); };
-  card.addEventListener("click",function(){ openDetailModal(e); });
+  card.addEventListener("click",function(){ openEntryModal(e); });
   return card;
 }
 function groupsOf(list){
@@ -366,7 +371,7 @@ function entryRowEl(e){
       '<span class="crow__actions"><button data-act="edit" title="Modifier">✎</button><button data-act="del" title="Supprimer">🗑</button></span></span>';
   row.querySelector('[data-act="edit"]').onclick=function(ev){ ev.stopPropagation(); openEntryModal(e); };
   row.querySelector('[data-act="del"]').onclick=function(ev){ ev.stopPropagation(); deleteEntry(e); };
-  row.addEventListener("click",function(){ openDetailModal(e); });
+  row.addEventListener("click",function(){ openEntryModal(e); });
   return row;
 }
 function renderCompact(){
