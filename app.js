@@ -113,6 +113,7 @@ var SETUP_SQL =
 "  synopsis text,\n"+
 "  member_id text,\n"+
 "  rating numeric default 0,\n"+
+"  rating_manual numeric,\n"+
 "  review text,\n"+
 "  status text default 'done',\n"+
 "  cover text,\n"+
@@ -178,7 +179,7 @@ function editableStars(value,size,onChange){
 /* ============================== Data layer ============================= */
 function rowToEntry(r){
   return { id:r.id, type:r.type, title:r.title, year:r.year||"", synopsis:r.synopsis||"", season:r.season||"", seasons:(Array.isArray(r.seasons)?r.seasons:[]), memberId:r.member_id,
-    rating:Number(r.rating)||0, review:r.review||"", status:r.status||"done",
+    rating:Number(r.rating)||0, ratingManual:(r.rating_manual!=null?Number(r.rating_manual):0), review:r.review||"", status:r.status||"done",
     hasCover:!!r.cover, createdAt:r.created_at?new Date(r.created_at).getTime():0, favorites:(Array.isArray(r.favorites)?r.favorites:[]) };
 }
 function applyMembers(rows){ state.members=(rows||[]).map(function(m){ return {id:m.id,name:m.name,color:m.color}; }); }
@@ -555,7 +556,7 @@ function openEntryModal(entry){
   var isEdit=!!entry;
   var form={ id:entry?entry.id:null, type:entry?entry.type:(state.fType==="all"?"film":state.fType),
     title:entry?entry.title||"":"", year:entry?entry.year||"":"", synopsis:entry?entry.synopsis||"":"", memberId:entry?entry.memberId:state.active,
-    rating:entry?entry.rating||0:0, review:entry?entry.review||"":"", status:entry?entry.status||"done":"done", hasCover:entry?!!entry.hasCover:false,
+    rating:entry?entry.rating||0:0, ratingManual:entry?entry.ratingManual||0:0, review:entry?entry.review||"":"", status:entry?entry.status||"done":"done", hasCover:entry?!!entry.hasCover:false,
     seasons:(entry&&Array.isArray(entry.seasons))?entry.seasons.map(function(s){return {n:s.n,rating:s.rating,review:s.review,kind:s.kind,name:s.name};}):[] };
   var coverValue=(entry&&entry.hasCover)?(state.covers[entry.id]||null):null; var coverChanged=false;
 
@@ -571,7 +572,7 @@ function openEntryModal(entry){
     '<div class="field" id="statusField"><label class="field__label">Statut</label><div class="type-picker" id="statusPick"></div></div>'+
     '<div class="field" id="finishedField"><label class="field__label">Diffusion</label><button type="button" class="toggle-btn" id="finishedBtn"></button></div>'+
     '<div class="field"><label class="field__label">Par qui</label><select class="input" id="fMemberSel"></select></div>'+
-    '<div class="field" id="noteField"><label class="field__label">Note sur 10 <span class="opt">(facultatif)</span></label><select class="input" id="noteSel"></select></div>'+
+    '<div class="field" id="noteField"><label class="field__label" id="noteLabel">Note sur 10 <span class="opt">(facultatif)</span></label><select class="input" id="noteSel"></select></div>'+
     '<div id="seasonsWrap" class="seasons-wrap"></div>'+
     '<label class="field__label">Affiche / pochette <span class="opt">(facultatif)</span></label>'+
     '<div class="coverbox"><div class="coverbox__preview" id="coverPrev"></div>'+
@@ -624,11 +625,13 @@ function openEntryModal(entry){
   var rev=overlay.querySelector("#fReview"); rev.value=form.review; rev.oninput=function(e){ form.review=e.target.value; };
   var reviewLabel=overlay.querySelector("#reviewLabel");
 
-  // Note simple (menu déroulant)
+  // Note (menu déroulant) : note simple pour les types classiques,
+  // note GLOBALE (prioritaire sur la moyenne des saisons) pour séries/animes
   var noteField=overlay.querySelector("#noteField");
+  var noteLabel=overlay.querySelector("#noteLabel");
   var noteSel=overlay.querySelector("#noteSel");
-  noteSel.innerHTML=noteOptionsHTML(form.rating);
-  noteSel.onchange=function(){ form.rating=noteSel.value?parseFloat(noteSel.value):0; };
+  noteSel.innerHTML=noteOptionsHTML(0);
+  noteSel.onchange=function(){ var v=noteSel.value?parseFloat(noteSel.value):0; if(isSeries()){ form.ratingManual=v; updateAvg(); } else { form.rating=v; } };
 
   // Gestionnaire de saisons (séries/animes)
   var seasonsWrap=overlay.querySelector("#seasonsWrap");
@@ -671,15 +674,17 @@ function openEntryModal(entry){
     var avgLine=document.createElement("div"); avgLine.className="season-avg"; avgLine.id="seasonAvg"; seasonsWrap.appendChild(avgLine);
     updateAvg();
   }
-  function updateAvg(){ var el=overlay.querySelector("#seasonAvg"); if(!el) return; var a=seasonAvg(); el.textContent=a?("Note "+(form.type==="anime"?"de l'anime":"de la série")+" (moyenne des saisons) : "+avg1(a)+"/10"):"Ajoute des notes de saison pour obtenir la moyenne."; }
+  function updateAvg(){ var el=overlay.querySelector("#seasonAvg"); if(!el) return; if(form.ratingManual>0){ el.textContent="Note globale : "+nfr(form.ratingManual)+"/10 (prioritaire sur la moyenne des saisons)."; return; } var a=seasonAvg(); el.textContent=a?("Note "+(form.type==="anime"?"de l'anime":"de la série")+" (moyenne des saisons) : "+avg1(a)+"/10"):"Ajoute des notes de saison, ou mets une note globale ci-dessus."; }
 
   function updateTypeUI(){
     var series=isSeries();
     statusField.style.display=series?"none":"";
     finishedField.style.display=series?"":"none";
-    noteField.style.display=series?"none":"";
+    noteField.style.display="";
     seasonsWrap.style.display=series?"":"none";
     reviewLabel.textContent=series?"Critique globale (facultatif)":"Critique";
+    noteLabel.innerHTML = series ? 'Note globale <span class="opt">(facultatif — sinon moyenne des saisons)</span>' : 'Note sur 10 <span class="opt">(facultatif)</span>';
+    noteSel.value = String(series? (form.ratingManual||"") : (form.rating||""));
     if(series) buildSeasons();
   }
   updateTypeUI();
@@ -702,14 +707,15 @@ function openEntryModal(entry){
     var id=form.id; var isNew=!(id&&state.entries.find(function(e){return e.id===id;})); if(isNew) id=uid();
     var series=isSeries();
     var seasonsClean = series ? form.seasons.map(function(s){ return {n:(s.n||"").toString(), rating:s.rating||0, review:(s.review||""), kind:seasonKind(s), name:(s.name||"")}; }).filter(function(s){ return s.n || s.rating || s.review || s.name; }) : [];
-    var ratingVal = series ? seasonsAverage(seasonsClean) : (form.rating||0);
-    var row={ id:id, type:form.type, title:title, year:form.year||null, synopsis:form.synopsis||null, member_id:form.memberId||null, rating:ratingVal, review:form.review||null, status:form.status, seasons: series?seasonsClean:null };
+    var ratingVal = series ? ((form.ratingManual>0)?form.ratingManual:seasonsAverage(seasonsClean)) : (form.rating||0);
+    var manualVal = (series && form.ratingManual>0) ? form.ratingManual : null;
+    var row={ id:id, type:form.type, title:title, year:form.year||null, synopsis:form.synopsis||null, member_id:form.memberId||null, rating:ratingVal, rating_manual:manualVal, review:form.review||null, status:form.status, seasons: series?seasonsClean:null };
     if(coverChanged) row.cover=coverValue||null;
     if(isNew) row.created_at=new Date().toISOString();
     saveBtn.disabled=true; saveBtn.textContent="Enregistrement…";
     db.from("entries").upsert(row).then(function(r){
       if(r.error){ flash("Erreur : "+r.error.message); saveBtn.disabled=false; saveBtn.textContent=isEdit?"Enregistrer":"Ajouter au catalogue"; return; }
-      var localEntry={ id:id, type:form.type, title:title, year:form.year||"", synopsis:form.synopsis||"", seasons:series?seasonsClean:[], memberId:form.memberId, rating:ratingVal, review:form.review||"", status:form.status,
+      var localEntry={ id:id, type:form.type, title:title, year:form.year||"", synopsis:form.synopsis||"", seasons:series?seasonsClean:[], memberId:form.memberId, rating:ratingVal, ratingManual:manualVal||0, review:form.review||"", status:form.status,
         hasCover: coverChanged?!!coverValue:form.hasCover, createdAt: isNew?Date.now():(entry.createdAt||Date.now()), favorites:(entry&&Array.isArray(entry.favorites))?entry.favorites:[] };
       var i=state.entries.findIndex(function(e){return e.id===id;}); if(i>=0) state.entries[i]=localEntry; else state.entries.unshift(localEntry);
       if(coverChanged){ if(coverValue) state.covers[id]=coverValue; else delete state.covers[id]; }
