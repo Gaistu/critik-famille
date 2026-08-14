@@ -244,6 +244,20 @@ body{
 .rfeed__av{ width:22px; height:22px; border-radius:50%; color:#fff; font-size:11px; font-weight:700; display:grid; place-items:center; flex-shrink:0 }
 .rfeed__txt{ flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .rfeed__time{ color:var(--soft); font-size:12px; flex-shrink:0 }
+
+/* Recherche automatique */
+.tmdb-search{ display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap }
+.tmdb-hint{ font-size:13px; color:var(--soft) }
+.search-results{ display:flex; flex-direction:column; gap:6px; margin-bottom:14px }
+.search-results:empty{ margin-bottom:0 }
+.sres{ display:flex; align-items:center; gap:11px; text-align:left; background:var(--field); border:1px solid var(--line); border-radius:11px; padding:7px 9px; cursor:pointer; font-family:inherit; color:var(--ink) }
+.sres:hover{ border-color:var(--soft) }
+.sres__thumb{ width:38px; height:52px; border-radius:6px; overflow:hidden; flex-shrink:0; display:grid; place-items:center; background:var(--paper2); color:var(--soft) }
+.sres__thumb img{ width:100%; height:100%; object-fit:cover; display:block }
+.sres__info{ display:flex; flex-direction:column; gap:2px; min-width:0 }
+.sres__title{ font-weight:600; font-size:14px }
+.sres__year{ color:var(--soft); font-weight:400 }
+.sres__sub{ color:var(--soft); font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .coverbox{ display:flex; gap:14px; align-items:flex-start; margin-bottom:16px }
 .coverbox__preview{ width:96px; height:128px; border-radius:10px; overflow:hidden; display:grid; place-items:center; flex-shrink:0; border:1px solid var(--line) }
 .coverbox__preview img{ width:100%; height:100%; object-fit:contain }

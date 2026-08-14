@@ -31,6 +31,47 @@ function avg1(n){ return (Math.round(n*10)/10).toString().replace(".",","); }
 function noteOptionsHTML(selected){ var s='<option value="">—</option>'; for(var v=0.5; v<=10.0001; v+=0.5){ var vv=Math.round(v*10)/10; s+='<option value="'+vv+'"'+((selected&&Number(selected)===vv)?" selected":"")+'>'+nfr(vv)+'/10</option>'; } return s; }
 function seasonKind(s){ if(s&&s.kind) return s.kind; var n=String((s&&s.n)||""); if(/^\d+$/.test(n)) return "season"; if(/oav/i.test(n)) return "oav"; if(/film/i.test(n)) return "film"; return "season"; }
 function seasonsAverage(seasons){ var r=(seasons||[]).filter(function(s){ return seasonKind(s)==="season" && s.rating>0; }); return r.length? Math.round((r.reduce(function(a,s){return a+s.rating;},0)/r.length)*10)/10 : 0; }
+
+/* ---- Recherche automatique (affiche + infos) ---- */
+function tmdbKey(){ return (typeof TMDB_API_KEY==="string" && TMDB_API_KEY && !/TA_CLE/.test(TMDB_API_KEY)) ? TMDB_API_KEY.trim() : ""; }
+function jsonp(url){ return new Promise(function(resolve,reject){
+  var cb="jcb"+Date.now()+Math.floor(Math.random()*10000); var s=document.createElement("script"); var done=false;
+  function cleanup(){ try{ delete window[cb]; }catch(e){ window[cb]=undefined; } if(s.parentNode) s.parentNode.removeChild(s); }
+  window[cb]=function(data){ done=true; resolve(data); cleanup(); };
+  s.onerror=function(){ if(!done){ cleanup(); reject(new Error("réseau")); } };
+  s.src=url+(url.indexOf("?")>=0?"&":"?")+"callback="+cb; document.body.appendChild(s);
+  setTimeout(function(){ if(!done){ cleanup(); reject(new Error("délai")); } },8000);
+}); }
+function srcTMDB(kind,q){
+  if(!tmdbKey()) return Promise.reject(new Error("no-key"));
+  var url="https://api.themoviedb.org/3/search/"+kind+"?api_key="+encodeURIComponent(tmdbKey())+"&language=fr-FR&include_adult=false&query="+encodeURIComponent(q);
+  return fetch(url).then(function(r){ if(!r.ok) throw new Error("TMDB "+r.status); return r.json(); }).then(function(d){
+    return (d.results||[]).slice(0,6).map(function(x){ var date=x.release_date||x.first_air_date||"";
+      return { title:x.title||x.name||"", year:date?date.slice(0,4):"", cover:x.poster_path?("https://image.tmdb.org/t/p/w500"+x.poster_path):"", synopsis:x.overview||"", sub:"" }; });
+  });
+}
+function srcOpenLib(q){
+  var url="https://openlibrary.org/search.json?limit=6&q="+encodeURIComponent(q);
+  return fetch(url).then(function(r){ if(!r.ok) throw new Error("OpenLibrary "+r.status); return r.json(); }).then(function(d){
+    return (d.docs||[]).slice(0,6).map(function(x){ return { title:x.title||"", year:x.first_publish_year?String(x.first_publish_year):"", cover:x.cover_i?("https://covers.openlibrary.org/b/id/"+x.cover_i+"-L.jpg"):"", synopsis:"", sub:(x.author_name&&x.author_name[0])||"" }; });
+  });
+}
+function srcITunes(entity,q){
+  var url="https://itunes.apple.com/search?country=FR&limit=6&entity="+entity+"&term="+encodeURIComponent(q);
+  return jsonp(url).then(function(d){
+    return (d.results||[]).slice(0,6).map(function(x){ var date=x.releaseDate||""; var art=(x.artworkUrl100||"").replace("100x100","600x600");
+      return { title:(entity==="album"?x.collectionName:x.trackName)||"", year:date?date.slice(0,4):"", cover:art, synopsis:"", sub:x.artistName||"" }; });
+  });
+}
+function searchTitle(type,q){
+  q=(q||"").trim(); if(!q) return Promise.resolve([]);
+  if(type==="film") return srcTMDB("movie",q);
+  if(type==="serie"||type==="anime") return srcTMDB("tv",q);
+  if(type==="livre"||type==="manga") return srcOpenLib(q);
+  if(type==="album") return srcITunes("album",q);
+  if(type==="titre") return srcITunes("song",q);
+  return Promise.resolve([]);
+}
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 function $(sel){ return document.querySelector(sel); }
 
@@ -69,6 +110,7 @@ var SETUP_SQL =
 "  season text,\n"+
 "  seasons jsonb,\n"+
 "  favorites jsonb,\n"+
+"  synopsis text,\n"+
 "  member_id text,\n"+
 "  rating numeric default 0,\n"+
 "  review text,\n"+
@@ -132,7 +174,7 @@ function editableStars(value,size,onChange){
 
 /* ============================== Data layer ============================= */
 function rowToEntry(r){
-  return { id:r.id, type:r.type, title:r.title, year:r.year||"", season:r.season||"", seasons:(Array.isArray(r.seasons)?r.seasons:[]), memberId:r.member_id,
+  return { id:r.id, type:r.type, title:r.title, year:r.year||"", synopsis:r.synopsis||"", season:r.season||"", seasons:(Array.isArray(r.seasons)?r.seasons:[]), memberId:r.member_id,
     rating:Number(r.rating)||0, review:r.review||"", status:r.status||"done",
     hasCover:!!r.cover, createdAt:r.created_at?new Date(r.created_at).getTime():0, favorites:(Array.isArray(r.favorites)?r.favorites:[]) };
 }
@@ -484,7 +526,7 @@ function renderStats(){
 function openEntryModal(entry){
   var isEdit=!!entry;
   var form={ id:entry?entry.id:null, type:entry?entry.type:(state.fType==="all"?"film":state.fType),
-    title:entry?entry.title||"":"", year:entry?entry.year||"":"", memberId:entry?entry.memberId:state.active,
+    title:entry?entry.title||"":"", year:entry?entry.year||"":"", synopsis:entry?entry.synopsis||"":"", memberId:entry?entry.memberId:state.active,
     rating:entry?entry.rating||0:0, review:entry?entry.review||"":"", status:entry?entry.status||"done":"done", hasCover:entry?!!entry.hasCover:false,
     seasons:(entry&&Array.isArray(entry.seasons))?entry.seasons.map(function(s){return {n:s.n,rating:s.rating,review:s.review,kind:s.kind,name:s.name};}):[] };
   var coverValue=(entry&&entry.hasCover)?(state.covers[entry.id]||null):null; var coverChanged=false;
@@ -495,6 +537,8 @@ function openEntryModal(entry){
     '<label class="field__label">Type</label><div class="type-picker" id="typePick"></div>'+
     '<div class="row"><div class="field" style="flex:3"><label class="field__label">Titre</label><input class="input" id="fTitle" placeholder="Titre de l\'œuvre"></div>'+
       '<div class="field" style="flex:1"><label class="field__label">Année</label><input class="input" id="fYear" placeholder="2024" inputmode="numeric"></div></div>'+
+    '<div class="tmdb-search"><button type="button" class="ghost" id="searchBtn">🔍 Rechercher le titre</button><span class="tmdb-hint" id="searchHint"></span></div>'+
+    '<div class="search-results" id="searchResults"></div>'+
     '<div class="field" id="statusField"><label class="field__label">Statut</label><div class="type-picker" id="statusPick"></div></div>'+
     '<div class="field" id="finishedField"><label class="field__label">Diffusion</label><button type="button" class="toggle-btn" id="finishedBtn"></button></div>'+
     '<div class="field"><label class="field__label">Par qui</label><select class="input" id="fMemberSel"></select></div>'+
@@ -619,19 +663,47 @@ function openEntryModal(entry){
     var series=isSeries();
     var seasonsClean = series ? form.seasons.map(function(s){ return {n:(s.n||"").toString(), rating:s.rating||0, review:(s.review||""), kind:seasonKind(s), name:(s.name||"")}; }).filter(function(s){ return s.n || s.rating || s.review || s.name; }) : [];
     var ratingVal = series ? seasonsAverage(seasonsClean) : (form.rating||0);
-    var row={ id:id, type:form.type, title:title, year:form.year||null, member_id:form.memberId||null, rating:ratingVal, review:form.review||null, status:form.status, seasons: series?seasonsClean:null };
+    var row={ id:id, type:form.type, title:title, year:form.year||null, synopsis:form.synopsis||null, member_id:form.memberId||null, rating:ratingVal, review:form.review||null, status:form.status, seasons: series?seasonsClean:null };
     if(coverChanged) row.cover=coverValue||null;
     if(isNew) row.created_at=new Date().toISOString();
     saveBtn.disabled=true; saveBtn.textContent="Enregistrement…";
     db.from("entries").upsert(row).then(function(r){
       if(r.error){ flash("Erreur : "+r.error.message); saveBtn.disabled=false; saveBtn.textContent=isEdit?"Enregistrer":"Ajouter au catalogue"; return; }
-      var localEntry={ id:id, type:form.type, title:title, year:form.year||"", seasons:series?seasonsClean:[], memberId:form.memberId, rating:ratingVal, review:form.review||"", status:form.status,
-        hasCover: coverChanged?!!coverValue:form.hasCover, createdAt: isNew?Date.now():(entry.createdAt||Date.now()) };
+      var localEntry={ id:id, type:form.type, title:title, year:form.year||"", synopsis:form.synopsis||"", seasons:series?seasonsClean:[], memberId:form.memberId, rating:ratingVal, review:form.review||"", status:form.status,
+        hasCover: coverChanged?!!coverValue:form.hasCover, createdAt: isNew?Date.now():(entry.createdAt||Date.now()), favorites:(entry&&Array.isArray(entry.favorites))?entry.favorites:[] };
       var i=state.entries.findIndex(function(e){return e.id===id;}); if(i>=0) state.entries[i]=localEntry; else state.entries.unshift(localEntry);
       if(coverChanged){ if(coverValue) state.covers[id]=coverValue; else delete state.covers[id]; }
       close(); refreshAfterData();
     });
   };
+  var searchBtn=overlay.querySelector("#searchBtn"); var searchHint=overlay.querySelector("#searchHint"); var searchResults=overlay.querySelector("#searchResults");
+  function applyResult(res){
+    if(res.title){ form.title=res.title; tEl.value=res.title; saveBtn.disabled=!form.title.trim(); }
+    if(res.year){ form.year=res.year; yEl.value=res.year; }
+    form.synopsis=res.synopsis||"";
+    if(res.cover){ coverValue=res.cover; coverChanged=true; drawCover(); }
+    searchResults.innerHTML=""; searchHint.textContent="Rempli ✓";
+  }
+  function runSearch(){
+    var q=(form.title||"").trim(); if(!q){ searchHint.textContent="Écris d'abord un titre."; return; }
+    searchResults.innerHTML=""; searchHint.textContent="Recherche…";
+    searchTitle(form.type,q).then(function(list){
+      if(!list.length){ searchHint.textContent="Aucun résultat."; return; }
+      searchHint.textContent="";
+      list.forEach(function(res){
+        var it=document.createElement("button"); it.type="button"; it.className="sres";
+        it.innerHTML='<span class="sres__thumb">'+(res.cover?'<img src="'+res.cover+'" alt="">':'<span class="sres__ph">—</span>')+'</span>'+
+          '<span class="sres__info"><span class="sres__title">'+esc(res.title)+(res.year?' <span class="sres__year">('+esc(res.year)+')</span>':'')+'</span>'+(res.sub?'<span class="sres__sub">'+esc(res.sub)+'</span>':'')+'</span>';
+        it.onclick=function(){ applyResult(res); };
+        searchResults.appendChild(it);
+      });
+    }).catch(function(err){
+      var msg=(err&&err.message)||"erreur";
+      if(msg==="no-key") searchHint.textContent="Ajoute ta clé TMDB dans config.js pour les films, séries et animes.";
+      else searchHint.textContent="Recherche indisponible ("+msg+").";
+    });
+  }
+  searchBtn.onclick=runSearch;
   setTimeout(function(){ tEl.focus(); },30);
 }
 
@@ -657,6 +729,7 @@ function openDetailModal(e){
   } else {
     body += '<div class="detail-block"><h4 class="detail-h">Critique</h4>'+(e.review?'<p class="detail-review">'+esc(e.review)+'</p>':'<p class="muted">Pas de critique.</p>')+'</div>';
   }
+  if(e.synopsis) body = '<div class="detail-block"><h4 class="detail-h">Résumé</h4><p class="detail-review">'+esc(e.synopsis)+'</p></div>' + body;
   var overlay=document.createElement("div"); overlay.className="overlay";
   overlay.innerHTML='<div class="modal detail" style="--c:'+t.color+'">'+
     '<div class="modal__head"><h2>'+esc(e.title)+'</h2><button class="x" data-x>✕</button></div>'+
