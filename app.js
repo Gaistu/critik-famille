@@ -196,11 +196,13 @@ function loadMembers(){ return db.from("members").select("*").then(function(r){ 
 function loadSettings(){ return db.from("settings").select("*").then(function(r){ if(!r.error) applySettings(r.data); }); }
 function loadActivity(){ if(!db) return Promise.resolve(); return db.from("activity").select("*").order("ts",{ascending:false}).limit(30).then(function(r){ if(!r.error) state.activity=r.data||[]; }).catch(function(){}); }
 function logActivity(action, e, rating){
-  if(!db || !state.active) return;
-  var row={ id:uid(), member_id:state.active, action:action, entry_id:e.id, entry_type:e.type, entry_title:e.title, rating:(rating!=null?rating:null) };
-  var local={}; for(var k in row) local[k]=row[k]; local.ts=new Date().toISOString();
-  state.activity.unshift(local); state.activity=state.activity.slice(0,30); updateRecent();
-  db.from("activity").insert(row).catch(function(){});
+  try{
+    if(!db || !state.active) return;
+    var row={ id:uid(), member_id:state.active, action:action, entry_id:e.id, entry_type:e.type, entry_title:e.title, rating:(rating!=null?rating:null) };
+    var local={}; for(var k in row) local[k]=row[k]; local.ts=new Date().toISOString();
+    state.activity.unshift(local); state.activity=state.activity.slice(0,30); updateRecent();
+    db.from("activity").insert(row).then(function(){}, function(){});
+  }catch(err){ /* ne doit jamais bloquer l'enregistrement */ }
 }
 
 /* ================================ Init ================================= */
