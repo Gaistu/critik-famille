@@ -537,6 +537,7 @@ function openEntryModal(entry){
     '<label class="field__label">Type</label><div class="type-picker" id="typePick"></div>'+
     '<div class="row"><div class="field" style="flex:3"><label class="field__label">Titre</label><input class="input" id="fTitle" placeholder="Titre de l\'œuvre"></div>'+
       '<div class="field" style="flex:1"><label class="field__label">Année</label><input class="input" id="fYear" placeholder="2024" inputmode="numeric"></div></div>'+
+    '<div class="dup-warn" id="dupWarn"></div>'+
     '<div class="tmdb-search"><button type="button" class="ghost" id="searchBtn">🔍 Rechercher le titre</button><span class="tmdb-hint" id="searchHint"></span></div>'+
     '<div class="search-results" id="searchResults"></div>'+
     '<div class="field" id="statusField"><label class="field__label">Statut</label><div class="type-picker" id="statusPick"></div></div>'+
@@ -577,7 +578,18 @@ function openEntryModal(entry){
   finishedBtn.onclick=function(){ form.status=(form.status==="done")?"doing":"done"; drawFinished(); };
   drawFinished();
 
-  var tEl=overlay.querySelector("#fTitle"); tEl.value=form.title; tEl.oninput=function(e){ form.title=e.target.value; saveBtn.disabled=!form.title.trim(); };
+  var tEl=overlay.querySelector("#fTitle"); tEl.value=form.title; tEl.oninput=function(e){ form.title=e.target.value; saveBtn.disabled=!form.title.trim(); checkDup(); };
+  var dupWarn=overlay.querySelector("#dupWarn");
+  function normTitle(s){ return (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim(); }
+  function checkDup(){
+    dupWarn.innerHTML=""; var q=normTitle(form.title); if(!q) return;
+    var matches=state.entries.filter(function(x){ return x.id!==form.id && normTitle(x.title)===q; });
+    if(!matches.length) return;
+    var x=matches[0], t=typeMeta(x.type), m=memberById(x.memberId);
+    dupWarn.innerHTML='<span class="dup-warn__txt">⚠ Déjà dans le catalogue : '+t.icon+' '+esc(x.title)+(x.year?' ('+esc(x.year)+')':'')+(m?' · '+esc(m.name):'')+(matches.length>1?' <b>+'+(matches.length-1)+'</b>':'')+'</span><button type="button" class="dup-warn__see">Voir</button>';
+    dupWarn.querySelector(".dup-warn__see").onclick=function(){ openDetailModal(x); };
+  }
+  checkDup();
   var yEl=overlay.querySelector("#fYear"); yEl.value=form.year; yEl.oninput=function(e){ form.year=e.target.value.replace(/[^0-9]/g,"").slice(0,4); yEl.value=form.year; };
   var mSel=overlay.querySelector("#fMemberSel"); state.members.forEach(function(m){ var o=document.createElement("option"); o.value=m.id; o.textContent=m.name; mSel.appendChild(o); });
   mSel.value=form.memberId||(state.members[0]&&state.members[0].id); form.memberId=mSel.value; mSel.onchange=function(){ form.memberId=mSel.value; };
@@ -682,7 +694,7 @@ function openEntryModal(entry){
     if(res.year){ form.year=res.year; yEl.value=res.year; }
     form.synopsis=res.synopsis||"";
     if(res.cover){ coverValue=res.cover; coverChanged=true; drawCover(); }
-    searchResults.innerHTML=""; searchHint.textContent="Rempli ✓";
+    searchResults.innerHTML=""; searchHint.textContent="Rempli ✓"; checkDup();
   }
   function runSearch(){
     var q=(form.title||"").trim(); if(!q){ searchHint.textContent="Écris d'abord un titre."; return; }

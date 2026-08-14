@@ -258,6 +258,13 @@ body{
 .sres__title{ font-weight:600; font-size:14px }
 .sres__year{ color:var(--soft); font-weight:400 }
 .sres__sub{ color:var(--soft); font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+
+/* Avertissement doublon */
+.dup-warn{ display:flex; align-items:center; justify-content:space-between; gap:10px; background:#FFF4E5; border:1px solid #F0D5A8; color:#8A5A1B; border-radius:11px; padding:9px 12px; font-size:13.5px; margin:-2px 0 12px }
+.dup-warn:empty{ display:none }
+body.dark .dup-warn{ background:#39301C; border-color:#6B5426; color:#EAC98C }
+.dup-warn__see{ border:1px solid currentColor; background:transparent; color:inherit; border-radius:8px; padding:4px 11px; font-size:12.5px; cursor:pointer; font-family:inherit; font-weight:600; flex-shrink:0 }
+.dup-warn__see:hover{ background:rgba(0,0,0,.05) }
 .coverbox{ display:flex; gap:14px; align-items:flex-start; margin-bottom:16px }
 .coverbox__preview{ width:96px; height:128px; border-radius:10px; overflow:hidden; display:grid; place-items:center; flex-shrink:0; border:1px solid var(--line) }
 .coverbox__preview img{ width:100%; height:100%; object-fit:contain }
