@@ -265,6 +265,25 @@ body{
 body.dark .dup-warn{ background:#39301C; border-color:#6B5426; color:#EAC98C }
 .dup-warn__see{ border:1px solid currentColor; background:transparent; color:inherit; border-radius:8px; padding:4px 11px; font-size:12.5px; cursor:pointer; font-family:inherit; font-weight:600; flex-shrink:0 }
 .dup-warn__see:hover{ background:rgba(0,0,0,.05) }
+
+/* Avatars cliquables + page membre */
+.avatar--click{ cursor:pointer }
+.avatar--click:hover{ box-shadow:0 0 0 3px rgba(0,0,0,.12) }
+.brow--click{ cursor:pointer; border-radius:8px; padding:3px 4px; margin-left:-4px; margin-right:-4px }
+.brow--click:hover{ background:var(--paper2) }
+.mp-title{ display:flex; align-items:center; gap:10px }
+.mp-title .avatar{ width:30px; height:30px; font-size:14px }
+.mp-stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:16px }
+.mp-stat{ background:var(--paper2); border:1px solid var(--line); border-radius:12px; padding:12px 8px; text-align:center }
+.mp-num{ display:block; font-family:'Fraunces',serif; font-weight:700; font-size:26px; line-height:1 }
+.mp-lbl{ display:block; font-size:12px; color:var(--soft); margin-top:4px }
+.mp-types{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px }
+.mp-type{ border:1.4px solid; border-radius:20px; padding:3px 10px; font-size:12.5px; font-weight:600 }
+.mp-list{ display:flex; flex-direction:column; gap:5px; margin-bottom:14px }
+.mp-item{ display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--card); border:1px solid var(--line); border-radius:9px; padding:7px 11px; font-size:13.5px; cursor:pointer }
+.mp-item:hover{ border-color:var(--soft) }
+.mp-item span{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.mp-item b{ flex-shrink:0 }
 .coverbox{ display:flex; gap:14px; align-items:flex-start; margin-bottom:16px }
 .coverbox__preview{ width:96px; height:128px; border-radius:10px; overflow:hidden; display:grid; place-items:center; flex-shrink:0; border:1px solid var(--line) }
 .coverbox__preview img{ width:100%; height:100%; object-fit:contain }
