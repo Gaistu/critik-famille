@@ -53,7 +53,12 @@ function srcTMDB(kind,q){
 function srcOpenLib(q){
   var url="https://openlibrary.org/search.json?limit=6&q="+encodeURIComponent(q);
   return fetch(url).then(function(r){ if(!r.ok) throw new Error("OpenLibrary "+r.status); return r.json(); }).then(function(d){
-    return (d.docs||[]).slice(0,6).map(function(x){ return { title:x.title||"", year:x.first_publish_year?String(x.first_publish_year):"", cover:x.cover_i?("https://covers.openlibrary.org/b/id/"+x.cover_i+"-L.jpg"):"", synopsis:"", sub:(x.author_name&&x.author_name[0])||"" }; });
+    return (d.docs||[]).slice(0,6).map(function(x){ return { title:x.title||"", year:x.first_publish_year?String(x.first_publish_year):"", cover:x.cover_i?("https://covers.openlibrary.org/b/id/"+x.cover_i+"-L.jpg"):"", synopsis:"", sub:(x.author_name&&x.author_name[0])||"", key:x.key||"" }; });
+  });
+}
+function fetchOLDesc(key){
+  return fetch("https://openlibrary.org"+key+".json").then(function(r){ return r.json(); }).then(function(d){
+    var desc=d && d.description; if(desc && typeof desc==="object") desc=desc.value; return (typeof desc==="string")?desc:"";
   });
 }
 function srcITunes(entity,q){
@@ -372,7 +377,8 @@ function renderRecent(){
   }
   if(!rows.length) return null;
   var box=document.createElement("div"); box.className="recent"; box.id="recentBox";
-  box.innerHTML='<p class="recent__h">Activité récente</p><div class="recent__list"></div>';
+  box.innerHTML='<p class="recent__h">Activité récente <button class="reconf" id="journalLink">voir tout</button></p><div class="recent__list"></div>';
+  var jl=box.querySelector("#journalLink"); if(jl) jl.onclick=openJournalModal;
   var listEl=box.querySelector(".recent__list");
   rows.forEach(function(r){ var el=document.createElement("div"); el.className="rfeed"; el.innerHTML=r.html;
     if(r.action!=="delete"){ el.onclick=function(){ var e=state.entries.find(function(x){return x.id===r.entryId;}); if(e) openDetailModal(e); }; } else { el.style.cursor="default"; }
@@ -532,11 +538,18 @@ function renderStats(){
   var topAll=rated.filter(inWho).sort(function(a,b){return b.rating-a.rating||(b.createdAt||0)-(a.createdAt||0);}).slice(0,5);
   var topYear=thisYear.filter(function(e){return e.rating>0&&inWho(e);}).sort(function(a,b){return b.rating-a.rating||(b.createdAt||0)-(a.createdAt||0);}).slice(0,5);
   var whoLabel=state.who!=="all"?" · "+esc(memberName(state.who)):"";
+  var bestNote=state.entries.reduce(function(a,e){return e.rating>a?e.rating:a;},0);
+  var now=new Date(); var months=[];
+  for(var mi=11;mi>=0;mi--){ var dd=new Date(now.getFullYear(),now.getMonth()-mi,1); months.push({y:dd.getFullYear(),mo:dd.getMonth(),label:dd.toLocaleDateString("fr-FR",{month:"short"}).replace(".",""),count:0}); }
+  state.entries.forEach(function(e){ if(!e.createdAt) return; var d=new Date(e.createdAt); for(var k=0;k<months.length;k++){ if(d.getFullYear()===months[k].y && d.getMonth()===months[k].mo){ months[k].count++; break; } } });
+  var maxMonth=Math.max.apply(null,[1].concat(months.map(function(x){return x.count;})));
+  var favType=state.members.map(function(m){ var mine=state.entries.filter(function(e){return e.memberId===m.id;}); if(!mine.length) return null; var cnt={}; mine.forEach(function(e){ cnt[e.type]=(cnt[e.type]||0)+1; }); var best=null,bc=0; TYPES.forEach(function(t){ if((cnt[t.id]||0)>bc){ bc=cnt[t.id]; best=t; } }); return best?{m:m,best:best,bc:bc}:null; }).filter(Boolean);
   wrap.innerHTML=
     '<div class="bignums">'+
       '<div class="bignum"><span class="bignum__n">'+state.entries.length+'</span><span class="bignum__l">fiches au total</span></div>'+
       '<div class="bignum"><span class="bignum__n">'+thisYear.length+'</span><span class="bignum__l">ajoutées en '+year+'</span></div>'+
       '<div class="bignum"><span class="bignum__n">'+(overallAvg?avg1(overallAvg):"—")+'</span><span class="bignum__l">note moyenne /10</span></div>'+
+      '<div class="bignum"><span class="bignum__n">'+(bestNote?nfr(bestNote):"—")+'</span><span class="bignum__l">meilleure note /10</span></div>'+
       '<div class="bignum"><span class="bignum__n">'+state.members.length+'</span><span class="bignum__l">membres</span></div>'+
     '</div>'+
     '<div class="stats-filter"><span>Palmarès par personne&nbsp;:</span><select class="select" id="whoSel"></select></div>'+
@@ -545,6 +558,8 @@ function renderStats(){
       '<section class="panel"><h3 class="panel__h">Répartition par type</h3>'+perType.map(function(t){ return '<div class="brow"><span class="brow__name">'+t.icon+' '+t.plural+'</span><div class="bar"><span style="width:'+(t.count/maxType*100)+'%;background:'+t.color+'"></span></div><span class="brow__val">'+t.count+'</span><span class="brow__avg">'+(t.avg?avg1(t.avg)+"/10":"—")+'</span></div>'; }).join("")+'</section>'+
       '<section class="panel"><h3 class="panel__h">🏆 Mieux notées'+(state.who!=="all"?whoLabel:" — depuis toujours")+'</h3>'+podium(topAll)+'</section>'+
       '<section class="panel"><h3 class="panel__h">✨ Top de '+year+whoLabel+'</h3>'+podium(topYear)+'</section>'+
+      '<section class="panel"><h3 class="panel__h">Ajouts par mois</h3><div class="months">'+months.map(function(x){ return '<div class="mcol"><div class="mcol__wrap"><div class="mcol__bar" style="height:'+(x.count/maxMonth*100)+'%"></div></div><div class="mcol__n">'+x.count+'</div><div class="mcol__l">'+esc(x.label)+'</div></div>'; }).join("")+'</div></section>'+
+      '<section class="panel"><h3 class="panel__h">Type préféré par personne</h3>'+(favType.length?favType.map(function(o){ return '<div class="brow2"><span class="brow__name"><span class="dot" style="background:'+o.m.color+'"></span>'+esc(o.m.name)+'</span><span class="fav-type" style="color:'+o.best.color+'">'+o.best.icon+' '+o.best.plural+'</span><span class="brow__val">'+o.bc+'</span></div>'; }).join(""):'<p class="muted">—</p>')+'</section>'+
     '</div>';
   fillSelect(wrap.querySelector("#whoSel"), [["all","Tout le monde"]].concat(state.members.map(function(m){return [m.id,m.name];})), state.who, function(v){ state.who=v; renderContent(); });
   [].forEach.call(wrap.querySelectorAll(".brow--click[data-mid]"),function(el){ el.onclick=function(){ openMemberModal(el.getAttribute("data-mid")); }; });
@@ -731,6 +746,10 @@ function openEntryModal(entry){
     form.synopsis=res.synopsis||"";
     if(res.cover){ coverValue=res.cover; coverChanged=true; drawCover(); }
     searchResults.innerHTML=""; searchHint.textContent="Rempli ✓"; checkDup();
+    if((form.type==="livre"||form.type==="manga") && !form.synopsis && res.key){
+      searchHint.textContent="Récupération du résumé…";
+      fetchOLDesc(res.key).then(function(d){ if(d){ form.synopsis=d; searchHint.textContent="Rempli ✓ (résumé inclus)"; } else searchHint.textContent="Rempli ✓"; }).catch(function(){ searchHint.textContent="Rempli ✓"; });
+    }
   }
   function runSearch(){
     var q=(form.title||"").trim(); if(!q){ searchHint.textContent="Écris d'abord un titre."; return; }
@@ -794,6 +813,33 @@ function openDetailModal(e){
   [].forEach.call(overlay.querySelectorAll("[data-x]"),function(b){ b.onclick=close; });
   overlay.querySelector("#dEdit").onclick=function(){ close(); openEntryModal(e); };
   overlay.querySelector("#dDel").onclick=function(){ close(); deleteEntry(e); };
+}
+
+/* =========================== Journal complet ========================= */
+function openJournalModal(){
+  var overlay=document.createElement("div"); overlay.className="overlay";
+  overlay.innerHTML='<div class="modal">'+
+    '<div class="modal__head"><h2>Journal complet</h2><button class="x" data-x>✕</button></div>'+
+    '<div class="field"><label class="field__label">Filtrer par personne</label><select class="input" id="jFilter"></select></div>'+
+    '<div class="j-list" id="jList"><p class="muted">Chargement…</p></div>'+
+    '<div class="modal__foot"><button class="ghost" data-x>Fermer</button></div></div>';
+  document.body.appendChild(overlay);
+  function close(){ overlay.remove(); }
+  overlay.addEventListener("mousedown",function(ev){ if(ev.target===overlay) close(); });
+  [].forEach.call(overlay.querySelectorAll("[data-x]"),function(b){ b.onclick=close; });
+  var jList=overlay.querySelector("#jList"); var all=[];
+  var filter=overlay.querySelector("#jFilter");
+  fillSelect(filter, [["all","Tout le monde"]].concat(state.members.map(function(m){return [m.id,m.name];})), "all", function(){ render(); });
+  function render(){
+    var who=filter.value; var rows=all.filter(function(a){ return who==="all"||a.member_id===who; });
+    if(!rows.length){ jList.innerHTML='<p class="muted">Aucune action enregistrée.</p>'; return; }
+    jList.innerHTML="";
+    rows.slice(0,300).forEach(function(a){ var r=actLine(a); var el=document.createElement("div"); el.className="rfeed"; el.innerHTML=r.html;
+      if(r.action!=="delete"){ el.onclick=function(){ var e=state.entries.find(function(x){return x.id===r.entryId;}); if(e){ close(); openDetailModal(e); } }; } else el.style.cursor="default";
+      jList.appendChild(el); });
+  }
+  if(db){ db.from("activity").select("*").order("ts",{ascending:false}).limit(300).then(function(res){ all=(res&&res.data)||[]; render(); }, function(){ all=state.activity.slice(); render(); }); }
+  else { all=state.activity.slice(); render(); }
 }
 
 /* =========================== Page membre ============================= */
