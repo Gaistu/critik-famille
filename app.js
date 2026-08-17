@@ -31,6 +31,8 @@ function avg1(n){ return (Math.round(n*10)/10).toString().replace(".",","); }
 function noteOptionsHTML(selected){ var s='<option value="">—</option>'; for(var v=0.5; v<=10.0001; v+=0.5){ var vv=Math.round(v*10)/10; s+='<option value="'+vv+'"'+((selected&&Number(selected)===vv)?" selected":"")+'>'+nfr(vv)+'/10</option>'; } return s; }
 function seasonKind(s){ if(s&&s.kind) return s.kind; var n=String((s&&s.n)||""); if(/^\d+$/.test(n)) return "season"; if(/oav/i.test(n)) return "oav"; if(/film/i.test(n)) return "film"; return "season"; }
 function seasonsAverage(seasons){ var r=(seasons||[]).filter(function(s){ return seasonKind(s)==="season" && s.rating>0; }); return r.length? Math.round((r.reduce(function(a,s){return a+s.rating;},0)/r.length)*10)/10 : 0; }
+function ratingsAverage(rs){ var r=(rs||[]).filter(function(x){ return x && x.r>0; }); return r.length? Math.round((r.reduce(function(a,x){return a+x.r;},0)/r.length)*10)/10 : 0; }
+function myRating(e, mid){ var rs=(e&&e.ratings)||[]; for(var i=0;i<rs.length;i++){ if(rs[i].m===mid) return rs[i]; } return null; }
 
 /* ---- Recherche automatique (affiche + infos) ---- */
 function tmdbKey(){ return (typeof TMDB_API_KEY==="string" && TMDB_API_KEY && !/TA_CLE/.test(TMDB_API_KEY)) ? TMDB_API_KEY.trim() : ""; }
@@ -119,6 +121,7 @@ var SETUP_SQL =
 "  member_id text,\n"+
 "  rating numeric default 0,\n"+
 "  rating_manual numeric,\n"+
+"  ratings jsonb,\n"+
 "  review text,\n"+
 "  status text default 'done',\n"+
 "  cover text,\n"+
@@ -183,8 +186,13 @@ function editableStars(value,size,onChange){
 
 /* ============================== Data layer ============================= */
 function rowToEntry(r){
+  var ratings = Array.isArray(r.ratings) ? r.ratings.filter(function(x){return x&&x.m;}).map(function(x){return {m:x.m, r:Number(x.r)||0, rev:x.rev||""};}) : [];
+  if(!ratings.length && r.member_id && (Number(r.rating)>0 || (r.review&&(""+r.review).trim()))){
+    ratings=[{m:r.member_id, r:Number(r.rating)||0, rev:r.review||""}];
+  }
+  var avg = ratings.length ? ratingsAverage(ratings) : (Number(r.rating)||0);
   return { id:r.id, type:r.type, title:r.title, year:r.year||"", synopsis:r.synopsis||"", season:r.season||"", seasons:(Array.isArray(r.seasons)?r.seasons:[]), memberId:r.member_id,
-    rating:Number(r.rating)||0, ratingManual:(r.rating_manual!=null?Number(r.rating_manual):0), review:r.review||"", status:r.status||"done",
+    rating:avg, ratings:ratings, review:r.review||"", status:r.status||"done",
     hasCover:!!r.cover, createdAt:r.created_at?new Date(r.created_at).getTime():0, favorites:(Array.isArray(r.favorites)?r.favorites:[]) };
 }
 function applyMembers(rows){ state.members=(rows||[]).map(function(m){ return {id:m.id,name:m.name,color:m.color}; }); }
@@ -369,9 +377,9 @@ function actLine(a){
 }
 function renderRecent(){
   var rows;
-  if(state.activity && state.activity.length){ rows=state.activity.slice(0,6).map(actLine); }
+  if(state.activity && state.activity.length){ rows=state.activity.slice(0,2).map(actLine); }
   else {
-    var items=state.entries.slice().filter(function(e){return e.createdAt;}).sort(function(a,b){return (b.createdAt||0)-(a.createdAt||0);}).slice(0,6);
+    var items=state.entries.slice().filter(function(e){return e.createdAt;}).sort(function(a,b){return (b.createdAt||0)-(a.createdAt||0);}).slice(0,2);
     rows=items.map(function(e){ var m=memberById(e.memberId); var t=typeMeta(e.type); var note=e.rating?" · "+nfr(e.rating)+"/10":"";
       return { entryId:e.id, action:"add", html:'<span class="rfeed__av" style="background:'+(m?m.color:'#888')+'">'+(m?esc(m.name.slice(0,1).toUpperCase()):'?')+'</span><span class="rfeed__txt"><b>'+(m?esc(m.name):'?')+'</b> a ajouté '+t.icon+' '+esc(e.title)+note+'</span><span class="rfeed__time">'+relTime(e.createdAt)+'</span>' }; });
   }
@@ -425,7 +433,8 @@ function entryCardEl(e){
   var cover=e.hasCover&&state.covers[e.id]?'<div class="cover" style="background:'+t.color+'18"><img src="'+state.covers[e.id]+'" alt=""></div>':"";
   var badge=(e.status&&e.status!=="done")?'<span class="status-chip" style="color:'+st.color+';border-color:'+st.color+'">'+st.icon+' '+st.label+'</span>':"";
   var avatar=m?'<span class="avatar avatar--click" data-act="member" style="background:'+m.color+'" title="'+esc(m.name)+'">'+esc(m.name.slice(0,1).toUpperCase())+'</span>':"";
-  var score=e.rating?'<span class="note-badge">'+nfr(e.rating)+'<span class="note-badge__out">/10</span></span>':'<span class="card__score card__score--none">non noté</span>';
+  var raters=(Array.isArray(e.ratings)?e.ratings.filter(function(x){return x.r>0;}).length:0);
+  var score=e.rating?'<span class="note-badge">'+nfr(e.rating)+'<span class="note-badge__out">/10</span></span>'+(raters>1?'<span class="raters-chip">'+raters+' notes</span>':''):'<span class="card__score card__score--none">non noté</span>';
   var year=e.year?'<span class="card__year"> · '+esc(e.year)+'</span>':"";
   var isSer=(e.type==="serie"||e.type==="anime"); var seasons=Array.isArray(e.seasons)?e.seasons:[];
   var doneChip=(isSer&&e.status==="done")?'<span class="status-chip" style="color:#3F7A3A;border-color:#3F7A3A">✓ Terminée</span>':"";
@@ -525,8 +534,8 @@ function renderStats(){
   var overallAvg=rated.length?rated.reduce(function(s,e){return s+e.rating;},0)/rated.length:0;
   var thisYear=state.entries.filter(function(e){return new Date(e.createdAt||0).getFullYear()===year;});
   function memberName(id){ return (state.members.find(function(m){return m.id===id;})||{}).name||"?"; }
-  var perMember=state.members.map(function(m){ var es=state.entries.filter(function(e){return e.memberId===m.id;}); var r=es.filter(function(e){return e.rating>0;});
-    return {id:m.id,name:m.name,color:m.color,count:es.length,avg:r.length?r.reduce(function(s,e){return s+e.rating;},0)/r.length:0}; }).sort(function(a,b){return b.count-a.count;});
+  var perMember=state.members.map(function(m){ var given=[]; state.entries.forEach(function(e){ var mr=myRating(e,m.id); if(mr&&mr.r>0) given.push(mr.r); });
+    return {id:m.id,name:m.name,color:m.color,count:given.length,avg:given.length?given.reduce(function(s,r){return s+r;},0)/given.length:0}; }).sort(function(a,b){return b.count-a.count;});
   var maxMember=Math.max.apply(null,[1].concat(perMember.map(function(p){return p.count;})));
   var perType=TYPES.map(function(t){ var es=state.entries.filter(function(e){return e.type===t.id;}); var r=es.filter(function(e){return e.rating>0;});
     return {icon:t.icon,plural:t.plural,color:t.color,count:es.length,avg:r.length?r.reduce(function(s,e){return s+e.rating;},0)/r.length:0}; }).filter(function(t){return t.count>0;}).sort(function(a,b){return b.count-a.count;});
@@ -540,10 +549,13 @@ function renderStats(){
   var whoLabel=state.who!=="all"?" · "+esc(memberName(state.who)):"";
   var bestNote=state.entries.reduce(function(a,e){return e.rating>a?e.rating:a;},0);
   var now=new Date(); var months=[];
-  for(var mi=11;mi>=0;mi--){ var dd=new Date(now.getFullYear(),now.getMonth()-mi,1); months.push({y:dd.getFullYear(),mo:dd.getMonth(),label:dd.toLocaleDateString("fr-FR",{month:"short"}).replace(".",""),count:0}); }
-  state.entries.forEach(function(e){ if(!e.createdAt) return; var d=new Date(e.createdAt); for(var k=0;k<months.length;k++){ if(d.getFullYear()===months[k].y && d.getMonth()===months[k].mo){ months[k].count++; break; } } });
+  for(var mi=11;mi>=0;mi--){ var dd=new Date(now.getFullYear(),now.getMonth()-mi,1); months.push({y:dd.getFullYear(),mo:dd.getMonth(),label:dd.toLocaleDateString("fr-FR",{month:"short"}).replace(".",""),count:0,sum:0,rc:0}); }
+  state.entries.forEach(function(e){ if(!e.createdAt) return; var d=new Date(e.createdAt); for(var k=0;k<months.length;k++){ if(d.getFullYear()===months[k].y && d.getMonth()===months[k].mo){ months[k].count++; if(e.rating>0){ months[k].sum+=e.rating; months[k].rc++; } break; } } });
   var maxMonth=Math.max.apply(null,[1].concat(months.map(function(x){return x.count;})));
   var favType=state.members.map(function(m){ var mine=state.entries.filter(function(e){return e.memberId===m.id;}); if(!mine.length) return null; var cnt={}; mine.forEach(function(e){ cnt[e.type]=(cnt[e.type]||0)+1; }); var best=null,bc=0; TYPES.forEach(function(t){ if((cnt[t.id]||0)>bc){ bc=cnt[t.id]; best=t; } }); return best?{m:m,best:best,bc:bc}:null; }).filter(Boolean);
+  var ratedAll=state.entries.filter(function(e){return e.rating>0;});
+  var bestE=null,worstE=null; ratedAll.forEach(function(e){ if(!bestE||e.rating>bestE.rating) bestE=e; if(!worstE||e.rating<worstE.rating) worstE=e; });
+  var cmp=state.members.map(function(m){ var given=[]; state.entries.forEach(function(e){ var mr=myRating(e,m.id); if(mr&&mr.r>0) given.push(mr.r); }); var mx=given.reduce(function(a,r){return r>a?r:a;},0); var av=given.length?given.reduce(function(a,r){return a+r;},0)/given.length:0; var fv=state.entries.filter(function(e){return Array.isArray(e.favorites)&&e.favorites.indexOf(m.id)>=0;}).length; return {m:m,count:given.length,avg:av,max:mx,fav:fv}; });
   wrap.innerHTML=
     '<div class="bignums">'+
       '<div class="bignum"><span class="bignum__n">'+state.entries.length+'</span><span class="bignum__l">fiches au total</span></div>'+
@@ -560,6 +572,9 @@ function renderStats(){
       '<section class="panel"><h3 class="panel__h">✨ Top de '+year+whoLabel+'</h3>'+podium(topYear)+'</section>'+
       '<section class="panel"><h3 class="panel__h">Ajouts par mois</h3><div class="months">'+months.map(function(x){ return '<div class="mcol"><div class="mcol__wrap"><div class="mcol__bar" style="height:'+(x.count/maxMonth*100)+'%"></div></div><div class="mcol__n">'+x.count+'</div><div class="mcol__l">'+esc(x.label)+'</div></div>'; }).join("")+'</div></section>'+
       '<section class="panel"><h3 class="panel__h">Type préféré par personne</h3>'+(favType.length?favType.map(function(o){ return '<div class="brow2"><span class="brow__name"><span class="dot" style="background:'+o.m.color+'"></span>'+esc(o.m.name)+'</span><span class="fav-type" style="color:'+o.best.color+'">'+o.best.icon+' '+o.best.plural+'</span><span class="brow__val">'+o.bc+'</span></div>'; }).join(""):'<p class="muted">—</p>')+'</section>'+
+      '<section class="panel"><h3 class="panel__h">Note moyenne par mois</h3><div class="months">'+months.map(function(x){ var a=x.rc?x.sum/x.rc:0; return '<div class="mcol"><div class="mcol__wrap"><div class="mcol__bar mcol__bar--gold" style="height:'+(a/10*100)+'%"></div></div><div class="mcol__n">'+(a?avg1(a):"–")+'</div><div class="mcol__l">'+esc(x.label)+'</div></div>'; }).join("")+'</div></section>'+
+      '<section class="panel"><h3 class="panel__h">Records</h3>'+(bestE?'<div class="rec-row"><span class="rec-medal">🥇</span><span class="rec-txt">'+typeMeta(bestE.type).icon+' '+esc(bestE.title)+'</span><b>'+nfr(bestE.rating)+'/10</b></div>':'<p class="muted">Aucune note pour l\'instant.</p>')+((worstE&&worstE!==bestE)?'<div class="rec-row"><span class="rec-medal">🥉</span><span class="rec-txt">'+typeMeta(worstE.type).icon+' '+esc(worstE.title)+'</span><b>'+nfr(worstE.rating)+'/10</b></div>':'')+'</section>'+
+      '<section class="panel"><h3 class="panel__h">Comparaison des membres</h3><div class="cmp"><div class="cmp__head"><span>Membre</span><span>Notes</span><span>Moy.</span><span>Max</span><span>❤</span></div>'+cmp.map(function(o){ return '<div class="cmp__row"><span class="brow__name"><span class="dot" style="background:'+o.m.color+'"></span>'+esc(o.m.name)+'</span><span>'+o.count+'</span><span>'+(o.avg?avg1(o.avg):"—")+'</span><span>'+(o.max?nfr(o.max):"—")+'</span><span>'+o.fav+'</span></div>'; }).join("")+'</div></section>'+
     '</div>';
   fillSelect(wrap.querySelector("#whoSel"), [["all","Tout le monde"]].concat(state.members.map(function(m){return [m.id,m.name];})), state.who, function(v){ state.who=v; renderContent(); });
   [].forEach.call(wrap.querySelectorAll(".brow--click[data-mid]"),function(el){ el.onclick=function(){ openMemberModal(el.getAttribute("data-mid")); }; });
@@ -571,8 +586,10 @@ function openEntryModal(entry){
   var isEdit=!!entry;
   var form={ id:entry?entry.id:null, type:entry?entry.type:(state.fType==="all"?"film":state.fType),
     title:entry?entry.title||"":"", year:entry?entry.year||"":"", synopsis:entry?entry.synopsis||"":"", memberId:entry?entry.memberId:state.active,
-    rating:entry?entry.rating||0:0, ratingManual:entry?entry.ratingManual||0:0, review:entry?entry.review||"":"", status:entry?entry.status||"done":"done", hasCover:entry?!!entry.hasCover:false,
+    rating:0, review:"", status:entry?entry.status||"done":"done", hasCover:entry?!!entry.hasCover:false,
+    ratings:(entry&&Array.isArray(entry.ratings))?entry.ratings.map(function(x){return {m:x.m,r:x.r,rev:x.rev};}):[],
     seasons:(entry&&Array.isArray(entry.seasons))?entry.seasons.map(function(s){return {n:s.n,rating:s.rating,review:s.review,kind:s.kind,name:s.name};}):[] };
+  var _mine = entry ? myRating(entry, state.active) : null; form.rating = _mine?(_mine.r||0):0; form.review = _mine?(_mine.rev||""):"";
   var coverValue=(entry&&entry.hasCover)?(state.covers[entry.id]||null):null; var coverChanged=false;
 
   var overlay=document.createElement("div"); overlay.className="overlay";
@@ -586,7 +603,7 @@ function openEntryModal(entry){
     '<div class="search-results" id="searchResults"></div>'+
     '<div class="field" id="statusField"><label class="field__label">Statut</label><div class="type-picker" id="statusPick"></div></div>'+
     '<div class="field" id="finishedField"><label class="field__label">Diffusion</label><button type="button" class="toggle-btn" id="finishedBtn"></button></div>'+
-    '<div class="field"><label class="field__label">Par qui</label><select class="input" id="fMemberSel"></select></div>'+
+    '<div class="field" id="famNotesField"><label class="field__label">Notes de la famille</label><div class="fam-notes" id="famNotes"></div></div>'+
     '<div class="field" id="noteField"><label class="field__label" id="noteLabel">Note sur 10 <span class="opt">(facultatif)</span></label><select class="input" id="noteSel"></select></div>'+
     '<div id="seasonsWrap" class="seasons-wrap"></div>'+
     '<label class="field__label">Affiche / pochette <span class="opt">(facultatif)</span></label>'+
@@ -635,8 +652,13 @@ function openEntryModal(entry){
   }
   checkDup();
   var yEl=overlay.querySelector("#fYear"); yEl.value=form.year; yEl.oninput=function(e){ form.year=e.target.value.replace(/[^0-9]/g,"").slice(0,4); yEl.value=form.year; };
-  var mSel=overlay.querySelector("#fMemberSel"); state.members.forEach(function(m){ var o=document.createElement("option"); o.value=m.id; o.textContent=m.name; mSel.appendChild(o); });
-  mSel.value=form.memberId||(state.members[0]&&state.members[0].id); form.memberId=mSel.value; mSel.onchange=function(){ form.memberId=mSel.value; };
+  form.memberId = entry?entry.memberId:state.active;
+  function buildFamNotes(){ var el=overlay.querySelector("#famNotes"); if(!el) return;
+    var others=(form.ratings||[]).filter(function(x){ return x.m!==state.active && x.r>0; });
+    if(!others.length){ el.innerHTML='<span class="muted">Personne d\'autre n\'a encore noté cette œuvre.</span>'; return; }
+    el.innerHTML=others.map(function(x){ var m=memberById(x.m); return '<span class="fam-note"><span class="avatar avatar--sm" style="background:'+(m?m.color:'#888')+'">'+(m?esc(m.name.slice(0,1).toUpperCase()):'?')+'</span>'+(m?esc(m.name):'?')+' <b>'+nfr(x.r)+'</b>/10</span>'; }).join("");
+  }
+  buildFamNotes();
   var rev=overlay.querySelector("#fReview"); rev.value=form.review; rev.oninput=function(e){ form.review=e.target.value; };
   var reviewLabel=overlay.querySelector("#reviewLabel");
 
@@ -646,7 +668,7 @@ function openEntryModal(entry){
   var noteLabel=overlay.querySelector("#noteLabel");
   var noteSel=overlay.querySelector("#noteSel");
   noteSel.innerHTML=noteOptionsHTML(0);
-  noteSel.onchange=function(){ var v=noteSel.value?parseFloat(noteSel.value):0; if(isSeries()){ form.ratingManual=v; updateAvg(); } else { form.rating=v; } };
+  noteSel.onchange=function(){ form.rating=noteSel.value?parseFloat(noteSel.value):0; };
 
   // Gestionnaire de saisons (séries/animes)
   var seasonsWrap=overlay.querySelector("#seasonsWrap");
@@ -689,7 +711,7 @@ function openEntryModal(entry){
     var avgLine=document.createElement("div"); avgLine.className="season-avg"; avgLine.id="seasonAvg"; seasonsWrap.appendChild(avgLine);
     updateAvg();
   }
-  function updateAvg(){ var el=overlay.querySelector("#seasonAvg"); if(!el) return; if(form.ratingManual>0){ el.textContent="Note globale : "+nfr(form.ratingManual)+"/10 (prioritaire sur la moyenne des saisons)."; return; } var a=seasonAvg(); el.textContent=a?("Note "+(form.type==="anime"?"de l'anime":"de la série")+" (moyenne des saisons) : "+avg1(a)+"/10"):"Ajoute des notes de saison, ou mets une note globale ci-dessus."; }
+  function updateAvg(){ var el=overlay.querySelector("#seasonAvg"); if(!el) return; var a=seasonAvg(); el.textContent=a?("Moyenne des saisons : "+avg1(a)+"/10 — tu peux la reporter dans ta note ci-dessus."):"Notes par saison (facultatif)."; }
 
   function updateTypeUI(){
     var series=isSeries();
@@ -697,9 +719,10 @@ function openEntryModal(entry){
     finishedField.style.display=series?"":"none";
     noteField.style.display="";
     seasonsWrap.style.display=series?"":"none";
-    reviewLabel.textContent=series?"Critique globale (facultatif)":"Critique";
-    noteLabel.innerHTML = series ? 'Note globale <span class="opt">(facultatif — sinon moyenne des saisons)</span>' : 'Note sur 10 <span class="opt">(facultatif)</span>';
-    noteSel.value = String(series? (form.ratingManual||"") : (form.rating||""));
+    var meName=(memberById(state.active)||{}).name||"toi";
+    reviewLabel.textContent="Ta critique ("+meName+")";
+    noteLabel.innerHTML = 'Ta note ('+esc(meName)+') <span class="opt">sur 10 — facultatif</span>';
+    noteSel.value = String(form.rating||"");
     if(series) buildSeasons();
   }
   updateTypeUI();
@@ -722,20 +745,26 @@ function openEntryModal(entry){
     var id=form.id; var isNew=!(id&&state.entries.find(function(e){return e.id===id;})); if(isNew) id=uid();
     var series=isSeries();
     var seasonsClean = series ? form.seasons.map(function(s){ return {n:(s.n||"").toString(), rating:s.rating||0, review:(s.review||""), kind:seasonKind(s), name:(s.name||"")}; }).filter(function(s){ return s.n || s.rating || s.review || s.name; }) : [];
-    var ratingVal = series ? ((form.ratingManual>0)?form.ratingManual:seasonsAverage(seasonsClean)) : (form.rating||0);
-    var manualVal = (series && form.ratingManual>0) ? form.ratingManual : null;
-    var row={ id:id, type:form.type, title:title, year:form.year||null, synopsis:form.synopsis||null, member_id:form.memberId||null, rating:ratingVal, rating_manual:manualVal, review:form.review||null, status:form.status, seasons: series?seasonsClean:null };
+    var meId=state.active;
+    /* fusion-notes-collectives : on repart TOUJOURS des notes les plus à jour
+       présentes dans l'appli, pour ne jamais écraser celles des autres membres */
+    var _cur=state.entries.find(function(x){return x.id===id;});
+    var _base=(_cur&&Array.isArray(_cur.ratings)&&_cur.ratings.length)?_cur.ratings.slice():(form.ratings||[]);
+    var ratings=_base.filter(function(x){ return x && x.m && x.m!==meId; });
+    if((form.rating||0)>0 || (form.review&&form.review.trim())) ratings.push({m:meId, r:form.rating||0, rev:form.review||""});
+    var ratingVal = ratingsAverage(ratings);
+    var row={ id:id, type:form.type, title:title, year:form.year||null, synopsis:form.synopsis||null, member_id:(isNew?meId:(entry?entry.memberId:meId))||null, rating:ratingVal, ratings:ratings, review:null, status:form.status, seasons: series?seasonsClean:null };
     if(coverChanged) row.cover=coverValue||null;
     if(isNew) row.created_at=new Date().toISOString();
     saveBtn.disabled=true; saveBtn.textContent="Enregistrement…";
     db.from("entries").upsert(row).then(function(r){
       if(r.error){ flash("Erreur : "+r.error.message); saveBtn.disabled=false; saveBtn.textContent=isEdit?"Enregistrer":"Ajouter au catalogue"; return; }
-      var localEntry={ id:id, type:form.type, title:title, year:form.year||"", synopsis:form.synopsis||"", seasons:series?seasonsClean:[], memberId:form.memberId, rating:ratingVal, ratingManual:manualVal||0, review:form.review||"", status:form.status,
+      var localEntry={ id:id, type:form.type, title:title, year:form.year||"", synopsis:form.synopsis||"", seasons:series?seasonsClean:[], memberId:row.member_id, rating:ratingVal, ratings:ratings, review:"", status:form.status,
         hasCover: coverChanged?!!coverValue:form.hasCover, createdAt: isNew?Date.now():(entry.createdAt||Date.now()), favorites:(entry&&Array.isArray(entry.favorites))?entry.favorites:[] };
       var i=state.entries.findIndex(function(e){return e.id===id;}); if(i>=0) state.entries[i]=localEntry; else state.entries.unshift(localEntry);
       if(coverChanged){ if(coverValue) state.covers[id]=coverValue; else delete state.covers[id]; }
-      var act = isNew?"add":((ratingVal!==(entry?entry.rating||0:0))?"rate":"edit");
-      logActivity(act, {id:id, type:form.type, title:title}, (act==="add"||act==="rate")?ratingVal:null);
+      var act = isNew?"add":"rate";
+      logActivity(act, {id:id, type:form.type, title:title}, (form.rating||0)>0?form.rating:null);
       close(); refreshAfterData();
     });
   };
@@ -781,21 +810,24 @@ function openDetailModal(e){
   var cover = e.hasCover&&state.covers[e.id]
     ? '<div class="detail-cover"><img src="'+state.covers[e.id]+'" alt=""></div>'
     : '<div class="detail-cover detail-cover--ph" style="background:'+t.color+'18;color:'+t.color+'">'+t.icon+'</div>';
-  var meta=[]; if(e.year) meta.push(esc(e.year)); if(m) meta.push(esc(m.name));
+  var meta=[]; if(e.year) meta.push(esc(e.year)); if(m) meta.push("ajouté par "+esc(m.name));
   meta.push(isSer ? (e.status==="done"?"Série terminée":"En cours de diffusion") : statusMeta(e.status||"done").label);
-  var score = e.rating? '<span class="note-badge">'+nfr(e.rating)+'<span class="note-badge__out">/10</span></span>' : '<span class="card__score card__score--none">non noté</span>';
+  var rlist=(e.ratings||[]).filter(function(x){ return x.r>0 || (x.rev&&(""+x.rev).trim()); });
+  var raters=rlist.filter(function(x){return x.r>0;}).length;
+  var score = e.rating? '<span class="note-badge">'+nfr(e.rating)+'<span class="note-badge__out">/10</span></span>'+(raters>1?'<span class="detail-raters">moyenne de '+raters+' notes</span>':'') : '<span class="card__score card__score--none">non noté</span>';
   var body="";
   if(isSer){
     var sHTML = seasons.length ? seasons.map(function(s){ var k=seasonKind(s);
       var lab = k==="oav"?("OAV"+(s.name?" — "+esc(s.name):"")) : k==="film"?("Film"+(s.name?" — "+esc(s.name):"")) : (/^\d+$/.test(String(s.n))?("Saison "+esc(s.n)):esc(s.n));
       var note = s.rating? '<span class="dseason__note">'+nfr(s.rating)+'/10</span>' : '<span class="dseason__note dseason__note--none">non noté</span>';
       return '<div class="dseason"><div class="dseason__head"><span class="dseason__name">'+lab+'</span>'+note+'</div>'+(s.review?'<p class="dseason__rev">'+esc(s.review)+'</p>':'')+'</div>';
-    }).join("") : '<p class="muted">Aucune saison enregistrée.</p>';
-    body += '<div class="detail-block"><h4 class="detail-h">Saisons et contenus</h4>'+sHTML+'</div>';
-    body += '<div class="detail-block"><h4 class="detail-h">Critique globale</h4>'+(e.review?'<p class="detail-review">'+esc(e.review)+'</p>':'<p class="muted">Aucune critique globale.</p>')+'</div>';
-  } else {
-    body += '<div class="detail-block"><h4 class="detail-h">Critique</h4>'+(e.review?'<p class="detail-review">'+esc(e.review)+'</p>':'<p class="muted">Pas de critique.</p>')+'</div>';
+    }).join("") : "";
+    if(sHTML) body += '<div class="detail-block"><h4 class="detail-h">Saisons et contenus</h4>'+sHTML+'</div>';
   }
+  var notesHTML = rlist.length ? rlist.map(function(x){ var mm=memberById(x.m);
+      return '<div class="dnote"><div class="dnote__head"><span class="dnote__who"><span class="avatar avatar--sm" style="background:'+(mm?mm.color:'#888')+'">'+(mm?esc(mm.name.slice(0,1).toUpperCase()):'?')+'</span>'+(mm?esc(mm.name):'?')+'</span>'+(x.r?'<span class="dnote__note">'+nfr(x.r)+'/10</span>':'<span class="dnote__note dnote__note--none">—</span>')+'</div>'+(x.rev?'<p class="dnote__rev">'+esc(x.rev)+'</p>':'')+'</div>';
+    }).join("") : '<p class="muted">Personne n\'a encore noté. Sélectionne « C\'est toi » en haut, puis « Modifier » pour ajouter ta note.</p>';
+  body += '<div class="detail-block"><h4 class="detail-h">Notes de la famille</h4>'+notesHTML+'</div>';
   if(e.synopsis) body = '<div class="detail-block"><h4 class="detail-h">Résumé</h4><p class="detail-review">'+esc(e.synopsis)+'</p></div>' + body;
   var overlay=document.createElement("div"); overlay.className="overlay";
   overlay.innerHTML='<div class="modal detail" style="--c:'+t.color+'">'+
@@ -845,18 +877,18 @@ function openJournalModal(){
 /* =========================== Page membre ============================= */
 function openMemberModal(id){
   var m=memberById(id); if(!m) return;
-  var mine=state.entries.filter(function(e){return e.memberId===id;});
-  var rated=mine.filter(function(e){return e.rating>0;});
-  var avg=rated.length? avg1(rated.reduce(function(a,e){return a+e.rating;},0)/rated.length):"—";
+  var mine=state.entries.filter(function(e){ var mr=myRating(e,id); return mr&&(mr.r>0||(mr.rev&&(""+mr.rev).trim())); });
+  var given=[]; mine.forEach(function(e){ var mr=myRating(e,id); if(mr&&mr.r>0) given.push(mr.r); });
+  var avg=given.length? avg1(given.reduce(function(a,r){return a+r;},0)/given.length):"—";
   var favs=state.entries.filter(function(e){return Array.isArray(e.favorites)&&e.favorites.indexOf(id)>=0;});
   var perType=TYPES.map(function(t){return {t:t,c:mine.filter(function(e){return e.type===t.id;}).length};}).filter(function(o){return o.c;});
   var recent=mine.slice().sort(function(a,b){return (b.createdAt||0)-(a.createdAt||0);}).slice(0,6);
-  function line(e){ var t=typeMeta(e.type); return '<div class="mp-item" data-id="'+e.id+'"><span>'+t.icon+' '+esc(e.title)+'</span>'+(e.rating?'<b>'+nfr(e.rating)+'/10</b>':'')+'</div>'; }
+  function line(e){ var t=typeMeta(e.type); var mr=myRating(e,id); return '<div class="mp-item" data-id="'+e.id+'"><span>'+t.icon+' '+esc(e.title)+'</span>'+((mr&&mr.r)?'<b>'+nfr(mr.r)+'/10</b>':'')+'</div>'; }
   var overlay=document.createElement("div"); overlay.className="overlay";
   overlay.innerHTML='<div class="modal" style="--c:'+m.color+'">'+
     '<div class="modal__head"><h2 class="mp-title"><span class="avatar" style="background:'+m.color+'">'+esc(m.name.slice(0,1).toUpperCase())+'</span> '+esc(m.name)+'</h2><button class="x" data-x>✕</button></div>'+
     '<div class="mp-stats">'+
-      '<div class="mp-stat"><span class="mp-num">'+mine.length+'</span><span class="mp-lbl">fiches</span></div>'+
+      '<div class="mp-stat"><span class="mp-num">'+mine.length+'</span><span class="mp-lbl">œuvres notées</span></div>'+
       '<div class="mp-stat"><span class="mp-num">'+avg+'</span><span class="mp-lbl">note moy. /10</span></div>'+
       '<div class="mp-stat"><span class="mp-num">'+favs.length+'</span><span class="mp-lbl">coups de cœur</span></div>'+
     '</div>'+
