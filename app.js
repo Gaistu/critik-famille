@@ -429,7 +429,7 @@ function visibleEntries(){
 }
 function entryCardEl(e){
   var t=typeMeta(e.type), m=memberById(e.memberId), st=statusMeta(e.status||"done");
-  var foot=e.status==="doing"?(m?esc(m.name):"?")+" · en cours":e.status==="todo"?(m?esc(m.name):"?")+" · à voir":(m?esc(m.name):"?")+" l'a "+t.verb;
+  var foot=e.status==="doing"?"En cours":e.status==="todo"?"À voir":"";
   var cover=e.hasCover&&state.covers[e.id]?'<div class="cover" style="background:'+t.color+'18"><img src="'+state.covers[e.id]+'" alt=""></div>':"";
   var badge=(e.status&&e.status!=="done")?'<span class="status-chip" style="color:'+st.color+';border-color:'+st.color+'">'+st.icon+' '+st.label+'</span>':"";
   var avatar="";
@@ -541,12 +541,14 @@ function renderStats(){
     return {icon:t.icon,plural:t.plural,color:t.color,count:es.length,avg:r.length?r.reduce(function(s,e){return s+e.rating;},0)/r.length:0}; }).filter(function(t){return t.count>0;}).sort(function(a,b){return b.count-a.count;});
   var maxType=Math.max.apply(null,[1].concat(perType.map(function(t){return t.count;})));
   function inWho(e){ return state.who==="all"||e.memberId===state.who; }
+  var rateCount=function(e){ return Array.isArray(e.ratings)?e.ratings.filter(function(x){return x.r>0;}).length:0; };
   function podium(items){ return items.length===0?'<p class="muted">Aucune note pour l\'instant.</p>'
-    :'<ol class="podium">'+items.map(function(e){ var t=typeMeta(e.type);
-      return '<li><span class="podium__dot" style="background:'+t.color+'">'+t.icon+'</span><span class="podium__title">'+esc(e.title)+'</span><span class="podium__by">'+esc(memberName(e.memberId))+'</span><span class="podium__rate"><b>'+nfr(e.rating)+'</b>/10</span></li>'; }).join("")+'</ol>'; }
+    :'<ol class="podium">'+items.map(function(e){ var t=typeMeta(e.type); var c=rateCount(e);
+      return '<li class="podium__click" data-id="'+e.id+'"><span class="podium__dot" style="background:'+t.color+'">'+t.icon+'</span><span class="podium__title">'+esc(e.title)+'</span><span class="podium__by">'+(c>1?(c+' notes'):(c===1?'1 note':''))+'</span><span class="podium__rate"><b>'+nfr(e.rating)+'</b>/10</span></li>'; }).join("")+'</ol>'; }
   var topAll=rated.filter(inWho).sort(function(a,b){return b.rating-a.rating||(b.createdAt||0)-(a.createdAt||0);}).slice(0,5);
   var topYear=thisYear.filter(function(e){return e.rating>0&&inWho(e);}).sort(function(a,b){return b.rating-a.rating||(b.createdAt||0)-(a.createdAt||0);}).slice(0,5);
   var whoLabel=state.who!=="all"?" · "+esc(memberName(state.who)):"";
+  var collective=rated.filter(function(e){ return rateCount(e)>=1; }).sort(function(a,b){return b.rating-a.rating||rateCount(b)-rateCount(a)||(b.createdAt||0)-(a.createdAt||0);}).slice(0,10);
   var bestNote=state.entries.reduce(function(a,e){return e.rating>a?e.rating:a;},0);
   var now=new Date(); var months=[];
   for(var mi=11;mi>=0;mi--){ var dd=new Date(now.getFullYear(),now.getMonth()-mi,1); months.push({y:dd.getFullYear(),mo:dd.getMonth(),label:dd.toLocaleDateString("fr-FR",{month:"short"}).replace(".",""),count:0,sum:0,rc:0}); }
@@ -566,6 +568,7 @@ function renderStats(){
     '</div>'+
     '<div class="stats-filter"><span>Palmarès par personne&nbsp;:</span><select class="select" id="whoSel"></select></div>'+
     '<div class="panels">'+
+      '<section class="panel panel--wide"><h3 class="panel__h">🏆 Palmarès de la famille <span class="opt">(classées par la note moyenne)</span></h3>'+(collective.length?'<ol class="podium">'+collective.map(function(e){ var t=typeMeta(e.type); var c=rateCount(e); return '<li class="podium__click" data-id="'+e.id+'"><span class="podium__dot" style="background:'+t.color+'">'+t.icon+'</span><span class="podium__title">'+esc(e.title)+'</span><span class="podium__by">'+c+(c>1?' notes':' note')+'</span><span class="podium__rate"><b>'+nfr(e.rating)+'</b>/10</span></li>'; }).join("")+'</ol>':'<p class="muted">Aucune note pour l\'instant.</p>')+'</section>'+
       '<section class="panel"><h3 class="panel__h">Classement des membres</h3>'+perMember.map(function(p){ return '<div class="brow brow--click" data-mid="'+p.id+'"><span class="brow__name"><span class="dot" style="background:'+p.color+'"></span>'+esc(p.name)+'</span><div class="bar"><span style="width:'+(p.count/maxMember*100)+'%;background:'+p.color+'"></span></div><span class="brow__val">'+p.count+'</span><span class="brow__avg">'+(p.avg?avg1(p.avg)+"/10":"—")+'</span></div>'; }).join("")+'</section>'+
       '<section class="panel"><h3 class="panel__h">Répartition par type</h3>'+perType.map(function(t){ return '<div class="brow"><span class="brow__name">'+t.icon+' '+t.plural+'</span><div class="bar"><span style="width:'+(t.count/maxType*100)+'%;background:'+t.color+'"></span></div><span class="brow__val">'+t.count+'</span><span class="brow__avg">'+(t.avg?avg1(t.avg)+"/10":"—")+'</span></div>'; }).join("")+'</section>'+
       '<section class="panel"><h3 class="panel__h">🏆 Mieux notées'+(state.who!=="all"?whoLabel:" — depuis toujours")+'</h3>'+podium(topAll)+'</section>'+
@@ -578,6 +581,7 @@ function renderStats(){
     '</div>';
   fillSelect(wrap.querySelector("#whoSel"), [["all","Tout le monde"]].concat(state.members.map(function(m){return [m.id,m.name];})), state.who, function(v){ state.who=v; renderContent(); });
   [].forEach.call(wrap.querySelectorAll(".brow--click[data-mid]"),function(el){ el.onclick=function(){ openMemberModal(el.getAttribute("data-mid")); }; });
+  [].forEach.call(wrap.querySelectorAll(".podium__click[data-id]"),function(el){ el.onclick=function(){ var e=state.entries.find(function(x){return x.id===el.getAttribute("data-id");}); if(e) openDetailModal(e); }; });
   return wrap;
 }
 
