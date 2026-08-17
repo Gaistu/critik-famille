@@ -432,7 +432,7 @@ function entryCardEl(e){
   var foot=e.status==="doing"?(m?esc(m.name):"?")+" · en cours":e.status==="todo"?(m?esc(m.name):"?")+" · à voir":(m?esc(m.name):"?")+" l'a "+t.verb;
   var cover=e.hasCover&&state.covers[e.id]?'<div class="cover" style="background:'+t.color+'18"><img src="'+state.covers[e.id]+'" alt=""></div>':"";
   var badge=(e.status&&e.status!=="done")?'<span class="status-chip" style="color:'+st.color+';border-color:'+st.color+'">'+st.icon+' '+st.label+'</span>':"";
-  var avatar=m?'<span class="avatar avatar--click" data-act="member" style="background:'+m.color+'" title="'+esc(m.name)+'">'+esc(m.name.slice(0,1).toUpperCase())+'</span>':"";
+  var avatar="";
   var raters=(Array.isArray(e.ratings)?e.ratings.filter(function(x){return x.r>0;}).length:0);
   var score=e.rating?'<span class="note-badge">'+nfr(e.rating)+'<span class="note-badge__out">/10</span></span>'+(raters>1?'<span class="raters-chip">'+raters+' notes</span>':''):'<span class="card__score card__score--none">non noté</span>';
   var year=e.year?'<span class="card__year"> · '+esc(e.year)+'</span>':"";
@@ -482,7 +482,7 @@ function entryRowEl(e){
     ? '<span class="crow__thumb"><img src="'+state.covers[e.id]+'" alt=""></span>'
     : '<span class="crow__thumb crow__thumb--ph" style="background:'+t.color+'22;color:'+t.color+'">'+t.icon+'</span>';
   var badge=(e.status&&e.status!=="done")?'<span class="status-chip" style="color:'+st.color+';border-color:'+st.color+'">'+st.icon+' '+st.label+'</span>':"";
-  var avatar=m?'<span class="avatar avatar--sm avatar--click" data-act="member" style="background:'+m.color+'" title="'+esc(m.name)+'">'+esc(m.name.slice(0,1).toUpperCase())+'</span>':"";
+  var avatar="";
   var year=e.year?'<span class="crow__year"> · '+esc(e.year)+'</span>':"";
   var season=((e.type==="serie"||e.type==="anime")&&Array.isArray(e.seasons)&&e.seasons.length)?'<span class="crow__year"> · '+e.seasons.length+' saison'+(e.seasons.length>1?'s':'')+'</span>':"";
   var score=e.rating?'<span class="crow__score"><b>'+nfr(e.rating)+'</b>/10</span>':'<span class="crow__score crow__score--none">non noté</span>';
@@ -810,7 +810,7 @@ function openDetailModal(e){
   var cover = e.hasCover&&state.covers[e.id]
     ? '<div class="detail-cover"><img src="'+state.covers[e.id]+'" alt=""></div>'
     : '<div class="detail-cover detail-cover--ph" style="background:'+t.color+'18;color:'+t.color+'">'+t.icon+'</div>';
-  var meta=[]; if(e.year) meta.push(esc(e.year)); if(m) meta.push("ajouté par "+esc(m.name));
+  var meta=[]; if(e.year) meta.push(esc(e.year));
   meta.push(isSer ? (e.status==="done"?"Série terminée":"En cours de diffusion") : statusMeta(e.status||"done").label);
   var rlist=(e.ratings||[]).filter(function(x){ return x.r>0 || (x.rev&&(""+x.rev).trim()); });
   var raters=rlist.filter(function(x){return x.r>0;}).length;
@@ -825,7 +825,7 @@ function openDetailModal(e){
     if(sHTML) body += '<div class="detail-block"><h4 class="detail-h">Saisons et contenus</h4>'+sHTML+'</div>';
   }
   var notesHTML = rlist.length ? rlist.map(function(x){ var mm=memberById(x.m);
-      return '<div class="dnote"><div class="dnote__head"><span class="dnote__who"><span class="avatar avatar--sm" style="background:'+(mm?mm.color:'#888')+'">'+(mm?esc(mm.name.slice(0,1).toUpperCase()):'?')+'</span>'+(mm?esc(mm.name):'?')+'</span>'+(x.r?'<span class="dnote__note">'+nfr(x.r)+'/10</span>':'<span class="dnote__note dnote__note--none">—</span>')+'</div>'+(x.rev?'<p class="dnote__rev">'+esc(x.rev)+'</p>':'')+'</div>';
+      return '<div class="dnote"><div class="dnote__head"><span class="dnote__who"><span class="avatar avatar--sm" style="background:'+(mm?mm.color:'#888')+'">'+(mm?esc(mm.name.slice(0,1).toUpperCase()):'?')+'</span>'+(mm?esc(mm.name):'?')+'</span>'+(x.r?'<span class="dnote__note">'+nfr(x.r)+'/10</span>':'<span class="dnote__note dnote__note--none">—</span>')+'<button class="dnote__del" data-delnote="'+esc(x.m)+'" title="Supprimer cette note">✕</button></div>'+(x.rev?'<p class="dnote__rev">'+esc(x.rev)+'</p>':'')+'</div>';
     }).join("") : '<p class="muted">Personne n\'a encore noté. Sélectionne « C\'est toi » en haut, puis « Modifier » pour ajouter ta note.</p>';
   body += '<div class="detail-block"><h4 class="detail-h">Notes de la famille</h4>'+notesHTML+'</div>';
   if(e.synopsis) body = '<div class="detail-block"><h4 class="detail-h">Résumé</h4><p class="detail-review">'+esc(e.synopsis)+'</p></div>' + body;
@@ -845,6 +845,15 @@ function openDetailModal(e){
   [].forEach.call(overlay.querySelectorAll("[data-x]"),function(b){ b.onclick=close; });
   overlay.querySelector("#dEdit").onclick=function(){ close(); openEntryModal(e); };
   overlay.querySelector("#dDel").onclick=function(){ close(); deleteEntry(e); };
+  [].forEach.call(overlay.querySelectorAll("[data-delnote]"),function(b){ b.onclick=function(ev){ ev.stopPropagation(); if(!confirm("Supprimer cette note ?")) return; removeRating(e, b.getAttribute("data-delnote")); close(); var fresh=state.entries.find(function(x){return x.id===e.id;}); if(fresh) openDetailModal(fresh); }; });
+}
+function removeRating(entry, mid){
+  var ratings=(entry.ratings||[]).filter(function(x){ return x.m!==mid; });
+  var avg=ratingsAverage(ratings);
+  entry.ratings=ratings; entry.rating=avg;
+  var i=state.entries.findIndex(function(x){return x.id===entry.id;}); if(i>=0){ state.entries[i].ratings=ratings; state.entries[i].rating=avg; }
+  refreshAfterData();
+  if(db) db.from("entries").update({ratings:ratings, rating:avg}).eq("id",entry.id).then(function(r){ if(r.error) flash("Erreur : "+r.error.message); }, function(){});
 }
 
 /* =========================== Journal complet ========================= */
