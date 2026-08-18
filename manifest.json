@@ -1,0 +1,14 @@
+{
+  "name": "Critik Famille",
+  "short_name": "Critik",
+  "description": "Le catalogue familial de films, séries, animes, livres, mangas et musiques, avec notes et critiques.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#17141F",
+  "theme_color": "#17141F",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

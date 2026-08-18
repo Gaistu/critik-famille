@@ -44,12 +44,14 @@ function jsonp(url){ return new Promise(function(resolve,reject){
   s.src=url+(url.indexOf("?")>=0?"&":"?")+"callback="+cb; document.body.appendChild(s);
   setTimeout(function(){ if(!done){ cleanup(); reject(new Error("délai")); } },8000);
 }); }
+var TMDB_GENRES={28:"Action",12:"Aventure",16:"Animation",35:"Comédie",80:"Crime",99:"Documentaire",18:"Drame",10751:"Familial",14:"Fantastique",36:"Histoire",27:"Horreur",10402:"Musique",9648:"Mystère",10749:"Romance",878:"Science-fiction",10770:"Téléfilm",53:"Thriller",10752:"Guerre",37:"Western",10759:"Action & Aventure",10762:"Enfants",10763:"Actualités",10764:"Téléréalité",10765:"Sci-Fi & Fantastique",10766:"Feuilleton",10767:"Talk",10768:"Guerre & Politique"};
+function mapGenres(ids){ return (ids||[]).map(function(id){return TMDB_GENRES[id];}).filter(Boolean); }
 function srcTMDB(kind,q){
   if(!tmdbKey()) return Promise.reject(new Error("no-key"));
   var url="https://api.themoviedb.org/3/search/"+kind+"?api_key="+encodeURIComponent(tmdbKey())+"&language=fr-FR&include_adult=false&query="+encodeURIComponent(q);
   return fetch(url).then(function(r){ if(!r.ok) throw new Error("TMDB "+r.status); return r.json(); }).then(function(d){
     return (d.results||[]).slice(0,6).map(function(x){ var date=x.release_date||x.first_air_date||"";
-      return { title:x.title||x.name||"", year:date?date.slice(0,4):"", cover:x.poster_path?("https://image.tmdb.org/t/p/w500"+x.poster_path):"", synopsis:x.overview||"", sub:"" }; });
+      return { title:x.title||x.name||"", year:date?date.slice(0,4):"", cover:x.poster_path?("https://image.tmdb.org/t/p/w500"+x.poster_path):"", synopsis:x.overview||"", sub:"", genres:mapGenres(x.genre_ids) }; });
   });
 }
 function srcOpenLib(q){
@@ -92,7 +94,7 @@ var LSraw = {
 var state = {
   title:"Critik Famille", members:[], entries:[], covers:{}, activity:[],
   active:null, view:"catalogue", theme:"light",
-  fType:"all", fStatus:"all", fMember:"all", query:"", sort:"recent", who:"all", group:"none", favOnly:false,
+  fType:"all", fStatus:"all", fMember:"all", fGenre:"all", query:"", sort:"recent", who:"all", group:"none", favOnly:false,
 };
 var db = null;
 
@@ -118,6 +120,7 @@ var SETUP_SQL =
 "  seasons jsonb,\n"+
 "  favorites jsonb,\n"+
 "  synopsis text,\n"+
+"  genres jsonb,\n"+
 "  member_id text,\n"+
 "  rating numeric default 0,\n"+
 "  rating_manual numeric,\n"+
@@ -191,7 +194,7 @@ function rowToEntry(r){
     ratings=[{m:r.member_id, r:Number(r.rating)||0, rev:r.review||""}];
   }
   var avg = ratings.length ? ratingsAverage(ratings) : (Number(r.rating)||0);
-  return { id:r.id, type:r.type, title:r.title, year:r.year||"", synopsis:r.synopsis||"", season:r.season||"", seasons:(Array.isArray(r.seasons)?r.seasons:[]), memberId:r.member_id,
+  return { id:r.id, type:r.type, title:r.title, year:r.year||"", synopsis:r.synopsis||"", genres:(Array.isArray(r.genres)?r.genres:[]), season:r.season||"", seasons:(Array.isArray(r.seasons)?r.seasons:[]), memberId:r.member_id,
     rating:avg, ratings:ratings, review:r.review||"", status:r.status||"done",
     hasCover:!!r.cover, createdAt:r.created_at?new Date(r.created_at).getTime():0, favorites:(Array.isArray(r.favorites)?r.favorites:[]) };
 }
@@ -332,6 +335,7 @@ function renderContent(){
       '<div class="search"><span>🔎</span><input id="searchInput" placeholder="Rechercher un titre, un mot de la critique…"></div>'+
       '<select class="select" id="fStatus"></select>'+
       '<select class="select" id="fMember"></select>'+
+      '<select class="select" id="fGenre"></select>'+
       '<select class="select" id="sortSel"></select>'+
       '<select class="select" id="groupSel"></select>'+
       '<button class="fav-toggle" id="favToggle" title="N\'afficher que mes coups de cœur">♡ Coups de cœur</button>'+
@@ -341,6 +345,10 @@ function renderContent(){
   var si=$("#searchInput"); si.value=state.query; si.addEventListener("input",function(e){ state.query=e.target.value; renderList(); });
   fillSelect($("#fStatus"), [["all","Tous les statuts"]].concat(STATUSES.map(function(s){return [s.id,s.label];})), state.fStatus, function(v){ state.fStatus=v; renderList(); });
   fillSelect($("#fMember"), [["all","Tout le monde"]].concat(state.members.map(function(m){return [m.id,m.name];})), state.fMember, function(v){ state.fMember=v; renderList(); });
+  var gset={}; state.entries.forEach(function(e){ (e.genres||[]).forEach(function(g){ gset[g]=true; }); });
+  var glist=Object.keys(gset).sort(function(a,b){return a.localeCompare(b,"fr");});
+  if(state.fGenre!=="all" && glist.indexOf(state.fGenre)<0) state.fGenre="all";
+  fillSelect($("#fGenre"), [["all","Tous les genres"]].concat(glist.map(function(g){return [g,g];})), state.fGenre, function(v){ state.fGenre=v; renderList(); });
   fillSelect($("#sortSel"), [["recent","Plus récents"],["rating","Mieux notés"],["az","A → Z"],["year","Année (récent)"],["author","Par auteur"]], state.sort, function(v){ state.sort=v; renderList(); });
   fillSelect($("#groupSel"), [["none","Sans regroupement"],["type","Grouper par type"],["member","Grouper par personne"]], state.group, function(v){ state.group=v; renderList(); });
   $("#addBtn").onclick=function(){ openEntryModal(null); };
@@ -417,6 +425,7 @@ function visibleEntries(){
   if(state.fType!=="all") list=list.filter(function(e){return e.type===state.fType;});
   if(state.fMember!=="all") list=list.filter(function(e){return e.memberId===state.fMember;});
   if(state.fStatus!=="all") list=list.filter(function(e){return (e.status||"done")===state.fStatus;});
+  if(state.fGenre!=="all") list=list.filter(function(e){return Array.isArray(e.genres)&&e.genres.indexOf(state.fGenre)>=0;});
   if(state.favOnly) list=list.filter(function(e){return isFav(e);});
   var q=state.query.trim().toLowerCase();
   if(q) list=list.filter(function(e){ return (e.title||"").toLowerCase().indexOf(q)>=0 || (e.review||"").toLowerCase().indexOf(q)>=0 || ((memberById(e.memberId)||{}).name||"").toLowerCase().indexOf(q)>=0; });
@@ -549,6 +558,7 @@ function renderStats(){
   var topYear=thisYear.filter(function(e){return e.rating>0&&inWho(e);}).sort(function(a,b){return b.rating-a.rating||(b.createdAt||0)-(a.createdAt||0);}).slice(0,5);
   var whoLabel=state.who!=="all"?" · "+esc(memberName(state.who)):"";
   var collective=rated.filter(function(e){ return rateCount(e)>=1; }).sort(function(a,b){return b.rating-a.rating||rateCount(b)-rateCount(a)||(b.createdAt||0)-(a.createdAt||0);}).slice(0,10);
+  var disagree=state.entries.map(function(e){ var ns=(e.ratings||[]).filter(function(x){return x.r>0;}).map(function(x){return x.r;}); if(ns.length<2) return null; var mn=Math.min.apply(null,ns), mx=Math.max.apply(null,ns); return {e:e, mn:mn, mx:mx, spread:mx-mn}; }).filter(function(o){return o&&o.spread>0;}).sort(function(a,b){return b.spread-a.spread;}).slice(0,8);
   var bestNote=state.entries.reduce(function(a,e){return e.rating>a?e.rating:a;},0);
   var now=new Date(); var months=[];
   for(var mi=11;mi>=0;mi--){ var dd=new Date(now.getFullYear(),now.getMonth()-mi,1); months.push({y:dd.getFullYear(),mo:dd.getMonth(),label:dd.toLocaleDateString("fr-FR",{month:"short"}).replace(".",""),count:0,sum:0,rc:0}); }
@@ -569,6 +579,7 @@ function renderStats(){
     '<div class="stats-filter"><span>Palmarès par personne&nbsp;:</span><select class="select" id="whoSel"></select></div>'+
     '<div class="panels">'+
       '<section class="panel panel--wide"><h3 class="panel__h">🏆 Palmarès de la famille <span class="opt">(classées par la note moyenne)</span></h3>'+(collective.length?'<ol class="podium">'+collective.map(function(e){ var t=typeMeta(e.type); var c=rateCount(e); return '<li class="podium__click" data-id="'+e.id+'"><span class="podium__dot" style="background:'+t.color+'">'+t.icon+'</span><span class="podium__title">'+esc(e.title)+'</span><span class="podium__by">'+c+(c>1?' notes':' note')+'</span><span class="podium__rate"><b>'+nfr(e.rating)+'</b>/10</span></li>'; }).join("")+'</ol>':'<p class="muted">Aucune note pour l\'instant.</p>')+'</section>'+
+      '<section class="panel panel--wide"><h3 class="panel__h">💥 Désaccords de la famille <span class="opt">(avis les plus divergents)</span></h3>'+(disagree.length?disagree.map(function(o){ var t=typeMeta(o.e.type); return '<div class="dis-row podium__click" data-id="'+o.e.id+'"><span class="podium__dot" style="background:'+t.color+'">'+t.icon+'</span><span class="dis-title">'+esc(o.e.title)+'</span><span class="dis-range">de '+nfr(o.mn)+' à '+nfr(o.mx)+'</span><span class="dis-spread">écart '+nfr(o.spread)+'</span></div>'; }).join(""):'<p class="muted">Aucun désaccord pour l\'instant — il faut au moins deux notes différentes sur une même œuvre.</p>')+'</section>'+
       '<section class="panel"><h3 class="panel__h">Classement des membres</h3>'+perMember.map(function(p){ return '<div class="brow brow--click" data-mid="'+p.id+'"><span class="brow__name"><span class="dot" style="background:'+p.color+'"></span>'+esc(p.name)+'</span><div class="bar"><span style="width:'+(p.count/maxMember*100)+'%;background:'+p.color+'"></span></div><span class="brow__val">'+p.count+'</span><span class="brow__avg">'+(p.avg?avg1(p.avg)+"/10":"—")+'</span></div>'; }).join("")+'</section>'+
       '<section class="panel"><h3 class="panel__h">Répartition par type</h3>'+perType.map(function(t){ return '<div class="brow"><span class="brow__name">'+t.icon+' '+t.plural+'</span><div class="bar"><span style="width:'+(t.count/maxType*100)+'%;background:'+t.color+'"></span></div><span class="brow__val">'+t.count+'</span><span class="brow__avg">'+(t.avg?avg1(t.avg)+"/10":"—")+'</span></div>'; }).join("")+'</section>'+
       '<section class="panel"><h3 class="panel__h">🏆 Mieux notées'+(state.who!=="all"?whoLabel:" — depuis toujours")+'</h3>'+podium(topAll)+'</section>'+
@@ -589,7 +600,7 @@ function renderStats(){
 function openEntryModal(entry){
   var isEdit=!!entry;
   var form={ id:entry?entry.id:null, type:entry?entry.type:(state.fType==="all"?"film":state.fType),
-    title:entry?entry.title||"":"", year:entry?entry.year||"":"", synopsis:entry?entry.synopsis||"":"", memberId:entry?entry.memberId:state.active,
+    title:entry?entry.title||"":"", year:entry?entry.year||"":"", synopsis:entry?entry.synopsis||"":"", genres:(entry&&Array.isArray(entry.genres))?entry.genres.slice():[], memberId:entry?entry.memberId:state.active,
     rating:0, review:"", status:entry?entry.status||"done":"done", hasCover:entry?!!entry.hasCover:false,
     ratings:(entry&&Array.isArray(entry.ratings))?entry.ratings.map(function(x){return {m:x.m,r:x.r,rev:x.rev};}):[],
     seasons:(entry&&Array.isArray(entry.seasons))?entry.seasons.map(function(s){return {n:s.n,rating:s.rating,review:s.review,kind:s.kind,name:s.name};}):[] };
@@ -605,6 +616,7 @@ function openEntryModal(entry){
     '<div class="dup-warn" id="dupWarn"></div>'+
     '<div class="tmdb-search"><button type="button" class="ghost" id="searchBtn">🔍 Rechercher le titre</button><span class="tmdb-hint" id="searchHint"></span></div>'+
     '<div class="search-results" id="searchResults"></div>'+
+    '<div class="field"><label class="field__label">Genres / étiquettes <span class="opt">(séparés par des virgules)</span></label><input class="input" id="fGenres" placeholder="Action, Comédie…"></div>'+
     '<div class="field" id="statusField"><label class="field__label">Statut</label><div class="type-picker" id="statusPick"></div></div>'+
     '<div class="field" id="finishedField"><label class="field__label">Diffusion</label><button type="button" class="toggle-btn" id="finishedBtn"></button></div>'+
     '<div class="field" id="famNotesField"><label class="field__label">Notes de la famille</label><div class="fam-notes" id="famNotes"></div></div>'+
@@ -635,8 +647,9 @@ function openEntryModal(entry){
     if(form.status===s.id){ b.style.background=s.color; b.style.borderColor=s.color; b.style.color="#fff"; } else { b.style.color=s.color; b.style.borderColor=s.color; }
     b.onclick=function(){ form.status=s.id; drawStatus(); }; statusPick.appendChild(b); }); }
   drawStatus();
-
-  // Série terminée (séries/animes) : pilote le statut done/doing
+  var genEl=overlay.querySelector("#fGenres");
+  genEl.value=(form.genres||[]).join(", ");
+  genEl.oninput=function(e){ form.genres=e.target.value.split(",").map(function(s){return s.trim();}).filter(Boolean); };
   var finishedField=overlay.querySelector("#finishedField");
   var finishedBtn=overlay.querySelector("#finishedBtn");
   function drawFinished(){ var on=form.status==="done"; finishedBtn.className="toggle-btn"+(on?" is-on":""); finishedBtn.textContent=on?"✓ Série terminée":"Série en cours de diffusion"; }
@@ -757,13 +770,13 @@ function openEntryModal(entry){
     var ratings=_base.filter(function(x){ return x && x.m && x.m!==meId; });
     if((form.rating||0)>0 || (form.review&&form.review.trim())) ratings.push({m:meId, r:form.rating||0, rev:form.review||""});
     var ratingVal = ratingsAverage(ratings);
-    var row={ id:id, type:form.type, title:title, year:form.year||null, synopsis:form.synopsis||null, member_id:(isNew?meId:(entry?entry.memberId:meId))||null, rating:ratingVal, ratings:ratings, review:null, status:form.status, seasons: series?seasonsClean:null };
+    var row={ id:id, type:form.type, title:title, year:form.year||null, synopsis:form.synopsis||null, genres:(form.genres&&form.genres.length?form.genres:null), member_id:(isNew?meId:(entry?entry.memberId:meId))||null, rating:ratingVal, ratings:ratings, review:null, status:form.status, seasons: series?seasonsClean:null };
     if(coverChanged) row.cover=coverValue||null;
     if(isNew) row.created_at=new Date().toISOString();
     saveBtn.disabled=true; saveBtn.textContent="Enregistrement…";
     db.from("entries").upsert(row).then(function(r){
       if(r.error){ flash("Erreur : "+r.error.message); saveBtn.disabled=false; saveBtn.textContent=isEdit?"Enregistrer":"Ajouter au catalogue"; return; }
-      var localEntry={ id:id, type:form.type, title:title, year:form.year||"", synopsis:form.synopsis||"", seasons:series?seasonsClean:[], memberId:row.member_id, rating:ratingVal, ratings:ratings, review:"", status:form.status,
+      var localEntry={ id:id, type:form.type, title:title, year:form.year||"", synopsis:form.synopsis||"", genres:(form.genres||[]).slice(), seasons:series?seasonsClean:[], memberId:row.member_id, rating:ratingVal, ratings:ratings, review:"", status:form.status,
         hasCover: coverChanged?!!coverValue:form.hasCover, createdAt: isNew?Date.now():(entry.createdAt||Date.now()), favorites:(entry&&Array.isArray(entry.favorites))?entry.favorites:[] };
       var i=state.entries.findIndex(function(e){return e.id===id;}); if(i>=0) state.entries[i]=localEntry; else state.entries.unshift(localEntry);
       if(coverChanged){ if(coverValue) state.covers[id]=coverValue; else delete state.covers[id]; }
@@ -777,6 +790,7 @@ function openEntryModal(entry){
     if(res.title){ form.title=res.title; tEl.value=res.title; saveBtn.disabled=!form.title.trim(); }
     if(res.year){ form.year=res.year; yEl.value=res.year; }
     form.synopsis=res.synopsis||"";
+    if(res.genres&&res.genres.length){ form.genres=res.genres.slice(); genEl.value=form.genres.join(", "); }
     if(res.cover){ coverValue=res.cover; coverChanged=true; drawCover(); }
     searchResults.innerHTML=""; searchHint.textContent="Rempli ✓"; checkDup();
     if((form.type==="livre"||form.type==="manga") && !form.synopsis && res.key){
@@ -839,6 +853,7 @@ function openDetailModal(e){
     '<div class="detail-top">'+cover+
       '<div class="detail-info"><span class="pill" style="color:'+t.color+';border-color:'+t.color+'">'+t.icon+' '+t.label+'</span>'+
         '<div class="detail-meta">'+meta.join(" · ")+'</div>'+
+        ((Array.isArray(e.genres)&&e.genres.length)?'<div class="genre-tags">'+e.genres.map(function(g){return '<span class="genre-tag">'+esc(g)+'</span>';}).join("")+'</div>':'')+
         '<div class="detail-score">'+score+'</div></div></div>'+
     body+
     '<div class="modal__foot detail-foot"><button class="ghost danger" id="dDel">Supprimer</button><span class="spacer"></span><button class="ghost" data-x>Fermer</button><button class="add-btn" id="dEdit">Modifier</button></div>'+
