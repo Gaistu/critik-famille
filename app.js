@@ -164,6 +164,8 @@ function themeMigrate(v){ if(v==="dark") return "sombre"; if(v==="light"||!v) re
 function applyTheme(id){
   id=themeMigrate(id); var th=THEMES[id]||THEMES.clair; state.theme=id;
   var css=":root{"+Object.keys(th.vars).map(function(k){return "--"+k+":"+th.vars[k]+" !important";}).join(";")+"}";
+  css+=".add-btn,.viewtabs button.is-on{background:"+th.vars.gold+" !important;color:#241a05 !important;border-color:"+th.vars.gold+" !important}";
+  css+=".banner{background:#2A2438 !important;color:#fff !important}";
   var el=document.getElementById("theme-vars");
   if(!el){ el=document.createElement("style"); el.id="theme-vars"; document.head.appendChild(el); }
   el.textContent=css;
