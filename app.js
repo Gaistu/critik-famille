@@ -435,13 +435,16 @@ function renderStatsStrip(){
   var strip=$("#statsStrip"); if(!strip) return;
   var counts={}; TYPES.forEach(function(t){ counts[t.id]=0; }); state.entries.forEach(function(e){ if(counts[e.type]!=null) counts[e.type]++; });
   strip.innerHTML="";
+  var _tv=(THEMES[state.theme]||THEMES.clair).vars;
   var total=document.createElement("button"); total.className="stat stat--total"+(state.fType==="all"?" is-on":"");
   total.innerHTML='<span class="stat__num">'+state.entries.length+'</span><span class="stat__lbl">Tout</span>';
-  if(state.fType==="all"){ var g=(THEMES[state.theme]||THEMES.clair).vars.gold; total.style.background=g; total.style.borderColor=g; total.querySelector(".stat__num").style.color="#241a05"; total.querySelector(".stat__lbl").style.color="rgba(36,26,5,.8)"; }
+  if(state.fType==="all"){ total.style.background=_tv.gold; total.style.borderColor=_tv.gold; total.querySelector(".stat__num").style.color="#241a05"; total.querySelector(".stat__lbl").style.color="rgba(36,26,5,.8)"; }
+  else { total.querySelector(".stat__num").style.color=_tv.ink; }
   total.onclick=function(){ state.fType="all"; renderStatsStrip(); renderList(); }; strip.appendChild(total);
   TYPES.forEach(function(t){ var b=document.createElement("button"); b.className="stat"+(state.fType===t.id?" is-on":"");
     if(state.fType===t.id){ b.style.borderColor=t.color; b.style.background=t.color; } else { b.style.setProperty("--c",t.color); }
     b.innerHTML='<span class="stat__num">'+counts[t.id]+'</span><span class="stat__lbl">'+t.icon+' '+t.plural+'</span>';
+    b.querySelector(".stat__num").style.color=(state.fType===t.id)?"#fff":_tv.ink;
     b.onclick=function(){ state.fType=state.fType===t.id?"all":t.id; renderStatsStrip(); renderList(); }; strip.appendChild(b); });
 }
 function relTime(ts){ if(!ts) return ""; var s=(Date.now()-ts)/1000; if(s<60) return "à l'instant"; var m=s/60; if(m<60) return "il y a "+Math.floor(m)+" min"; var h=m/60; if(h<24) return "il y a "+Math.floor(h)+" h"; var d=h/24; if(d<7) return "il y a "+Math.floor(d)+" j"; return new Date(ts).toLocaleDateString("fr-FR"); }
