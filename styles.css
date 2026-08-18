@@ -13,7 +13,7 @@ body{ transition:background .2s ease, color .2s ease }
 html,body{margin:0}
 body{
   font-family:'Inter',system-ui,sans-serif; color:var(--ink);
-  background:radial-gradient(1200px 500px at 15% -10%, var(--glow) 0%, transparent 60%), var(--paper);
+  background:var(--paper);
   min-height:100vh; line-height:1.5; -webkit-font-smoothing:antialiased;
 }
 .app-root{ padding:22px clamp(14px,4vw,40px) 60px; }
@@ -244,6 +244,11 @@ body{
 .fav-toggle{ border:1.4px solid var(--line); background:var(--field); border-radius:11px; padding:11px 14px; font-family:inherit; font-weight:600; font-size:14px; cursor:pointer; color:var(--ink) }
 .fav-toggle:hover{ border-color:var(--soft) }
 .fav-toggle.is-on{ background:#C0392B; border-color:#C0392B; color:#fff }
+.watch-btn{ filter:grayscale(1); opacity:.45 }
+.watch-btn.is-on{ filter:none; opacity:1 }
+.fav-toggle.is-on-watch{ background:#2C6E9B; border-color:#2C6E9B; color:#fff }
+.linklike{ background:none; border:none; color:var(--ink); font-family:inherit; font-size:14px; font-weight:600; cursor:pointer; text-align:left; padding:0; flex:1 }
+.linklike:hover{ color:var(--gold) }
 
 /* Activité récente */
 .recent{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px 14px; margin-bottom:16px }

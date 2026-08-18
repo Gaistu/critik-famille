@@ -94,7 +94,7 @@ var LSraw = {
 var state = {
   title:"Critik Famille", members:[], entries:[], covers:{}, activity:[],
   active:null, view:"catalogue", theme:"light",
-  fType:"all", fStatus:"all", fMember:"all", fGenre:"all", query:"", sort:"recent", who:"all", group:"none", favOnly:false,
+  fType:"all", fStatus:"all", fMember:"all", fGenre:"all", fMinNote:0, query:"", sort:"recent", who:"all", group:"none", favOnly:false, watchOnly:false,
 };
 var db = null;
 
@@ -119,6 +119,7 @@ var SETUP_SQL =
 "  season text,\n"+
 "  seasons jsonb,\n"+
 "  favorites jsonb,\n"+
+"  watchers jsonb,\n"+
 "  synopsis text,\n"+
 "  genres jsonb,\n"+
 "  member_id text,\n"+
@@ -167,7 +168,7 @@ function applyTheme(id){
   if(!el){ el=document.createElement("style"); el.id="theme-vars"; document.head.appendChild(el); }
   el.textContent=css;
   document.body.classList.toggle("dark", !!th.dark);
-  document.body.style.background="radial-gradient(1200px 500px at 15% -10%, "+th.vars.glow+" 0%, transparent 60%), "+th.vars.paper;
+  document.body.style.background=th.vars.paper;
   document.body.style.color=th.vars.ink;
   LSraw.set("cat_theme",id);
   var b=$("#btnTheme"); if(b) b.textContent="🎨";
@@ -185,6 +186,33 @@ function openThemeMenu(){
   overlay.addEventListener("mousedown",function(ev){ if(ev.target===overlay) close(); });
   [].forEach.call(overlay.querySelectorAll("[data-x]"),function(b){ b.onclick=close; });
   [].forEach.call(overlay.querySelectorAll("[data-theme]"),function(b){ b.onclick=function(){ applyTheme(b.getAttribute("data-theme")); close(); }; });
+}
+function currentView(){ return { fType:state.fType, fStatus:state.fStatus, fMember:state.fMember, fGenre:state.fGenre, fMinNote:state.fMinNote, sort:state.sort, group:state.group, favOnly:state.favOnly, query:state.query }; }
+function applyView(v){ ["fType","fStatus","fMember","fGenre","fMinNote","sort","group","favOnly","query"].forEach(function(k){ if(v[k]!==undefined) state[k]=v[k]; }); renderContent(); }
+function openViewsMenu(){
+  var views=LSraw.get("cat_views",[]); if(!Array.isArray(views)) views=[];
+  var overlay=document.createElement("div"); overlay.className="overlay";
+  overlay.innerHTML='<div class="modal" style="max-width:420px">'+
+    '<div class="modal__head"><h2>Vues enregistrées</h2><button class="x" data-x>✕</button></div>'+
+    '<p class="hint">Enregistre la combinaison de filtres actuelle (type, genre, note minimale, tri…) pour la retrouver en un clic.</p>'+
+    '<button class="add-btn" id="saveView" style="width:100%;margin-bottom:14px">+ Enregistrer la vue actuelle</button>'+
+    '<div class="bk-list" id="viewsList"></div>'+
+    '<div class="modal__foot"><button class="ghost" data-x>Fermer</button></div></div>';
+  document.body.appendChild(overlay);
+  function close(){ overlay.remove(); }
+  overlay.addEventListener("mousedown",function(ev){ if(ev.target===overlay) close(); });
+  [].forEach.call(overlay.querySelectorAll("[data-x]"),function(b){ b.onclick=close; });
+  var listEl=overlay.querySelector("#viewsList");
+  function draw(){
+    listEl.innerHTML = views.length? "" : '<p class="muted">Aucune vue enregistrée.</p>';
+    views.forEach(function(v,i){ var row=document.createElement("div"); row.className="bk-row";
+      row.innerHTML='<button class="linklike" data-apply="'+i+'">'+esc(v.name)+'</button><button class="dnote__del" data-delview="'+i+'" title="Supprimer">✕</button>';
+      row.querySelector("[data-apply]").onclick=function(){ applyView(v.v); close(); };
+      row.querySelector("[data-delview]").onclick=function(){ views.splice(i,1); LSraw.set("cat_views",views); draw(); };
+      listEl.appendChild(row); });
+  }
+  draw();
+  overlay.querySelector("#saveView").onclick=function(){ var name=prompt("Nom de la vue :",""); if(!name) return; views.unshift({name:name.slice(0,40), v:currentView()}); views=views.slice(0,20); LSraw.set("cat_views",views); draw(); };
 }
 
 /* ============================ Compression image ========================= */
@@ -229,7 +257,7 @@ function rowToEntry(r){
   var avg = ratings.length ? ratingsAverage(ratings) : (Number(r.rating)||0);
   return { id:r.id, type:r.type, title:r.title, year:r.year||"", synopsis:r.synopsis||"", genres:(Array.isArray(r.genres)?r.genres:[]), season:r.season||"", seasons:(Array.isArray(r.seasons)?r.seasons:[]), memberId:r.member_id,
     rating:avg, ratings:ratings, review:r.review||"", status:r.status||"done",
-    hasCover:!!r.cover, createdAt:r.created_at?new Date(r.created_at).getTime():0, favorites:(Array.isArray(r.favorites)?r.favorites:[]) };
+    hasCover:!!r.cover, createdAt:r.created_at?new Date(r.created_at).getTime():0, favorites:(Array.isArray(r.favorites)?r.favorites:[]), watchers:(Array.isArray(r.watchers)?r.watchers:[]) };
 }
 function applyMembers(rows){ state.members=(rows||[]).map(function(m){ return {id:m.id,name:m.name,color:m.color}; }); }
 function applyEntries(rows){ state.entries=(rows||[]).map(rowToEntry); state.covers={};
@@ -373,9 +401,12 @@ function renderContent(){
       '<select class="select" id="fStatus"></select>'+
       '<select class="select" id="fMember"></select>'+
       '<select class="select" id="fGenre"></select>'+
+      '<select class="select" id="fMinNote"></select>'+
       '<select class="select" id="sortSel"></select>'+
       '<select class="select" id="groupSel"></select>'+
       '<button class="fav-toggle" id="favToggle" title="N\'afficher que mes coups de cœur">♡ Coups de cœur</button>'+
+      '<button class="fav-toggle" id="watchToggle" title="N\'afficher que mes envies à voir">👁 À voir</button>'+
+      '<button class="fav-toggle" id="viewsBtn" title="Vues enregistrées">★ Vues</button>'+
       '<button class="add-btn" id="addBtn">+ Ajouter</button>'+
     '</div>'+
     '<div id="listArea"></div>';
@@ -388,6 +419,9 @@ function renderContent(){
   fillSelect($("#fGenre"), [["all","Tous les genres"]].concat(glist.map(function(g){return [g,g];})), state.fGenre, function(v){ state.fGenre=v; renderList(); });
   fillSelect($("#sortSel"), [["recent","Plus récents"],["rating","Mieux notés"],["az","A → Z"],["year","Année (récent)"],["author","Par auteur"]], state.sort, function(v){ state.sort=v; renderList(); });
   fillSelect($("#groupSel"), [["none","Sans regroupement"],["type","Grouper par type"],["member","Grouper par personne"]], state.group, function(v){ state.group=v; renderList(); });
+  fillSelect($("#fMinNote"), [["0","Toutes les notes"],["5","≥ 5/10"],["6","≥ 6/10"],["7","≥ 7/10"],["8","≥ 8/10"],["9","≥ 9/10"]], String(state.fMinNote), function(v){ state.fMinNote=parseFloat(v)||0; renderList(); });
+  var vb=$("#viewsBtn"); if(vb) vb.onclick=openViewsMenu;
+  var wt=$("#watchToggle"); if(wt){ wt.className="fav-toggle"+(state.watchOnly?" is-on-watch":""); wt.onclick=function(){ state.watchOnly=!state.watchOnly; wt.className="fav-toggle"+(state.watchOnly?" is-on-watch":""); renderList(); }; }
   $("#addBtn").onclick=function(){ openEntryModal(null); };
   var ft=$("#favToggle"); if(ft){ ft.className="fav-toggle"+(state.favOnly?" is-on":""); ft.textContent=(state.favOnly?"❤":"♡")+" Coups de cœur"; ft.onclick=function(){ state.favOnly=!state.favOnly; ft.className="fav-toggle"+(state.favOnly?" is-on":""); ft.textContent=(state.favOnly?"❤":"♡")+" Coups de cœur"; renderList(); }; }
   renderStatsStrip(); renderList(); updateRecent();
@@ -456,6 +490,17 @@ function toggleFav(e){
   refreshAfterData();
   db.from("entries").update({favorites:favs}).eq("id",e.id).then(function(r){ if(r.error) flash("Erreur : "+r.error.message); });
 }
+function isWatch(e){ return Array.isArray(e.watchers) && state.active && e.watchers.indexOf(state.active)>=0; }
+function watchCount(e){ return Array.isArray(e.watchers)?e.watchers.length:0; }
+function toggleWatch(e){
+  if(!state.active){ flash("Choisis d'abord qui tu es (en haut)."); return; }
+  var ws=Array.isArray(e.watchers)?e.watchers.slice():[];
+  var i=ws.indexOf(state.active); if(i>=0) ws.splice(i,1); else ws.push(state.active);
+  e.watchers=ws;
+  var idx=state.entries.findIndex(function(x){return x.id===e.id;}); if(idx>=0) state.entries[idx].watchers=ws;
+  refreshAfterData();
+  db.from("entries").update({watchers:ws}).eq("id",e.id).then(function(r){ if(r.error) flash("Erreur : "+r.error.message); });
+}
 
 function visibleEntries(){
   var list=state.entries.slice();
@@ -463,7 +508,9 @@ function visibleEntries(){
   if(state.fMember!=="all") list=list.filter(function(e){return e.memberId===state.fMember;});
   if(state.fStatus!=="all") list=list.filter(function(e){return (e.status||"done")===state.fStatus;});
   if(state.fGenre!=="all") list=list.filter(function(e){return Array.isArray(e.genres)&&e.genres.indexOf(state.fGenre)>=0;});
+  if(state.fMinNote>0) list=list.filter(function(e){return (e.rating||0)>=state.fMinNote;});
   if(state.favOnly) list=list.filter(function(e){return isFav(e);});
+  if(state.watchOnly) list=list.filter(function(e){return isWatch(e);});
   var q=state.query.trim().toLowerCase();
   if(q) list=list.filter(function(e){ return (e.title||"").toLowerCase().indexOf(q)>=0 || (e.review||"").toLowerCase().indexOf(q)>=0 || ((memberById(e.memberId)||{}).name||"").toLowerCase().indexOf(q)>=0; });
   if(state.sort==="recent") list.sort(function(a,b){ return (b.createdAt||0)-(a.createdAt||0); });
@@ -489,12 +536,13 @@ function entryCardEl(e){
   var card=document.createElement("article"); card.className="card card--click"; card.style.setProperty("--c",t.color);
   card.innerHTML='<div class="card__spine"></div><div class="card__body">'+cover+
     '<div class="card__top"><span class="pill" style="color:'+t.color+';border-color:'+t.color+'">'+t.icon+' '+t.label+'</span>'+
-      '<div class="card__badges">'+badge+doneChip+'<button class="fav-btn'+(fav?' is-on':'')+'" data-act="fav" title="Coup de cœur">'+(fav?'❤':'♡')+'</button>'+avatar+'</div></div>'+
+      '<div class="card__badges">'+badge+doneChip+'<button class="fav-btn watch-btn'+(isWatch(e)?' is-on':'')+'" data-act="watch" title="À voir / envie">👁</button><button class="fav-btn'+(fav?' is-on':'')+'" data-act="fav" title="Coup de cœur">'+(fav?'❤':'♡')+'</button>'+avatar+'</div></div>'+
     '<h3 class="card__title">'+esc(e.title)+year+'</h3>'+
     '<div class="card__rating">'+score+'</div>'+seasonStrip+
     '<div class="card__foot"><span>'+foot+'</span>'+
       '<span class="card__actions"><button data-act="edit" title="Modifier">✎</button><button data-act="del" title="Supprimer">🗑</button></span></div></div>';
   card.querySelector('[data-act="fav"]').onclick=function(ev){ ev.stopPropagation(); toggleFav(e); };
+  var wb=card.querySelector('[data-act="watch"]'); if(wb) wb.onclick=function(ev){ ev.stopPropagation(); toggleWatch(e); };
   card.querySelector('[data-act="edit"]').onclick=function(ev){ ev.stopPropagation(); openEntryModal(e); };
   card.querySelector('[data-act="del"]').onclick=function(ev){ ev.stopPropagation(); deleteEntry(e); };
   var av=card.querySelector('[data-act="member"]'); if(av) av.onclick=function(ev){ ev.stopPropagation(); openMemberModal(e.memberId); };
@@ -536,9 +584,10 @@ function entryRowEl(e){
   row.innerHTML=thumb+
     '<span class="crow__main"><span class="crow__title">'+esc(e.title)+season+year+'</span>'+
       '<span class="crow__meta"><span class="crow__type" style="color:'+t.color+'">'+t.icon+' '+t.label+'</span>'+badge+score+'</span></span>'+
-    '<span class="crow__right"><button class="fav-btn'+(isFav(e)?' is-on':'')+'" data-act="fav" title="Coup de cœur">'+(isFav(e)?'❤':'♡')+'</button>'+avatar+
+    '<span class="crow__right"><button class="fav-btn watch-btn'+(isWatch(e)?' is-on':'')+'" data-act="watch" title="À voir / envie">👁</button><button class="fav-btn'+(isFav(e)?' is-on':'')+'" data-act="fav" title="Coup de cœur">'+(isFav(e)?'❤':'♡')+'</button>'+avatar+
       '<span class="crow__actions"><button data-act="edit" title="Modifier">✎</button><button data-act="del" title="Supprimer">🗑</button></span></span>';
   row.querySelector('[data-act="fav"]').onclick=function(ev){ ev.stopPropagation(); toggleFav(e); };
+  var rwb=row.querySelector('[data-act="watch"]'); if(rwb) rwb.onclick=function(ev){ ev.stopPropagation(); toggleWatch(e); };
   row.querySelector('[data-act="edit"]').onclick=function(ev){ ev.stopPropagation(); openEntryModal(e); };
   row.querySelector('[data-act="del"]').onclick=function(ev){ ev.stopPropagation(); deleteEntry(e); };
   var rav=row.querySelector('[data-act="member"]'); if(rav) rav.onclick=function(ev){ ev.stopPropagation(); openMemberModal(e.memberId); };
@@ -605,6 +654,9 @@ function renderStats(){
   var ratedAll=state.entries.filter(function(e){return e.rating>0;});
   var bestE=null,worstE=null; ratedAll.forEach(function(e){ if(!bestE||e.rating>bestE.rating) bestE=e; if(!worstE||e.rating<worstE.rating) worstE=e; });
   var cmp=state.members.map(function(m){ var given=[]; state.entries.forEach(function(e){ var mr=myRating(e,m.id); if(mr&&mr.r>0) given.push(mr.r); }); var mx=given.reduce(function(a,r){return r>a?r:a;},0); var av=given.length?given.reduce(function(a,r){return a+r;},0)/given.length:0; var fv=state.entries.filter(function(e){return Array.isArray(e.favorites)&&e.favorites.indexOf(m.id)>=0;}).length; return {m:m,count:given.length,avg:av,max:mx,fav:fv}; });
+  var genreStats={}; state.entries.forEach(function(e){ (e.genres||[]).forEach(function(g){ if(!genreStats[g]) genreStats[g]={n:0,sum:0,rc:0}; genreStats[g].n++; if(e.rating>0){ genreStats[g].sum+=e.rating; genreStats[g].rc++; } }); });
+  var genreArr=Object.keys(genreStats).map(function(g){ var s=genreStats[g]; return {g:g,n:s.n,avg:s.rc?s.sum/s.rc:0}; }).sort(function(a,b){return b.n-a.n||b.avg-a.avg;}).slice(0,12);
+  var maxGenre=Math.max.apply(null,[1].concat(genreArr.map(function(x){return x.n;})));
   wrap.innerHTML=
     '<div class="bignums">'+
       '<div class="bignum"><span class="bignum__n">'+state.entries.length+'</span><span class="bignum__l">fiches au total</span></div>'+
@@ -626,6 +678,7 @@ function renderStats(){
       '<section class="panel"><h3 class="panel__h">Note moyenne par mois</h3><div class="months">'+months.map(function(x){ var a=x.rc?x.sum/x.rc:0; return '<div class="mcol"><div class="mcol__wrap"><div class="mcol__bar mcol__bar--gold" style="height:'+(a/10*100)+'%"></div></div><div class="mcol__n">'+(a?avg1(a):"–")+'</div><div class="mcol__l">'+esc(x.label)+'</div></div>'; }).join("")+'</div></section>'+
       '<section class="panel"><h3 class="panel__h">Records</h3>'+(bestE?'<div class="rec-row"><span class="rec-medal">🥇</span><span class="rec-txt">'+typeMeta(bestE.type).icon+' '+esc(bestE.title)+'</span><b>'+nfr(bestE.rating)+'/10</b></div>':'<p class="muted">Aucune note pour l\'instant.</p>')+((worstE&&worstE!==bestE)?'<div class="rec-row"><span class="rec-medal">🥉</span><span class="rec-txt">'+typeMeta(worstE.type).icon+' '+esc(worstE.title)+'</span><b>'+nfr(worstE.rating)+'/10</b></div>':'')+'</section>'+
       '<section class="panel"><h3 class="panel__h">Comparaison des membres</h3><div class="cmp"><div class="cmp__head"><span>Membre</span><span>Notes</span><span>Moy.</span><span>Max</span><span>❤</span></div>'+cmp.map(function(o){ return '<div class="cmp__row"><span class="brow__name"><span class="dot" style="background:'+o.m.color+'"></span>'+esc(o.m.name)+'</span><span>'+o.count+'</span><span>'+(o.avg?avg1(o.avg):"—")+'</span><span>'+(o.max?nfr(o.max):"—")+'</span><span>'+o.fav+'</span></div>'; }).join("")+'</div></section>'+
+      '<section class="panel panel--wide"><h3 class="panel__h">Genres de la famille <span class="opt">(nombre de fiches · note moyenne)</span></h3>'+(genreArr.length?genreArr.map(function(o){ return '<div class="brow"><span class="brow__name">'+esc(o.g)+'</span><div class="bar"><span style="width:'+(o.n/maxGenre*100)+'%;background:var(--gold)"></span></div><span class="brow__val">'+o.n+'</span><span class="brow__avg">'+(o.avg?avg1(o.avg)+"/10":"—")+'</span></div>'; }).join(""):'<p class="muted">Ajoute des genres à tes fiches (recherche automatique ou champ « Genres ») pour voir ces statistiques.</p>')+'</section>'+
     '</div>';
   fillSelect(wrap.querySelector("#whoSel"), [["all","Tout le monde"]].concat(state.members.map(function(m){return [m.id,m.name];})), state.who, function(v){ state.who=v; renderContent(); });
   [].forEach.call(wrap.querySelectorAll(".brow--click[data-mid]"),function(el){ el.onclick=function(){ openMemberModal(el.getAttribute("data-mid")); }; });
