@@ -33,6 +33,16 @@ body{
   padding-bottom:16px; border-bottom:1px solid var(--line); margin-bottom:16px; }
 .brand{ display:flex; align-items:center; gap:13px }
 .brand__mark{ font-size:30px; color:var(--ink); line-height:1; margin-top:4px }
+.brand__mark svg{ display:block; border-radius:11px }
+.icon-btn.is-off{ opacity:.5 }
+.theme-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-bottom:8px }
+.theme-opt{ display:flex; align-items:center; gap:10px; padding:10px; border:1.5px solid var(--line); background:var(--field); border-radius:12px; cursor:pointer; font-family:inherit; font-size:14px; font-weight:600; color:var(--ink) }
+.theme-opt:hover{ border-color:var(--soft) }
+.theme-opt.is-on{ border-color:var(--gold); box-shadow:0 0 0 2px var(--gold) inset }
+.theme-swatch{ width:34px; height:34px; border-radius:9px; flex-shrink:0; position:relative; border:1px solid var(--line); overflow:hidden }
+.theme-swatch span{ position:absolute; display:block; border:1px solid transparent }
+.theme-swatch span:nth-child(1){ left:5px; top:6px; width:15px; height:22px; border-radius:4px }
+.theme-swatch span:nth-child(2){ right:5px; bottom:6px; width:11px; height:11px; border-radius:50% }
 .brand__title{ font-family:'Fraunces',serif; font-weight:700; font-size:clamp(24px,4vw,34px); border:none;
   background:transparent; color:var(--ink); padding:0; margin:0; width:min(62vw,460px); letter-spacing:-0.02em; border-radius:6px; }
 .brand__title:focus{ outline:2px dashed var(--line); outline-offset:4px }
