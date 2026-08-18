@@ -151,7 +151,17 @@ function flash(msg){
   if(!b){ b=document.createElement("div"); b.id="banner"; b.className="banner"; document.body.appendChild(b); }
   b.textContent=msg; clearTimeout(bannerTimer); bannerTimer=setTimeout(function(){ b.remove(); },3200);
 }
-function applyTheme(mode){ if(mode!=="dark") mode="light"; state.theme=mode; document.body.classList.toggle("dark", mode==="dark"); LSraw.set("cat_theme",mode); var b=$("#btnTheme"); if(b) b.textContent=(mode==="dark"?"☀️":"🌙"); }
+function applyTheme(mode){
+  if(mode!=="dark") mode="light";
+  state.theme=mode;
+  document.body.classList.toggle("dark", mode==="dark");
+  /* On force le fond directement (le style en ligne l'emporte sur un ancien
+     styles.css resté en cache), pour garantir un mode sombre correct. */
+  if(mode==="dark"){ document.body.style.background="radial-gradient(1200px 500px at 15% -10%, #241F33 0%, transparent 60%), #17141F"; document.body.style.color="#ECE6DA"; }
+  else { document.body.style.background=""; document.body.style.color=""; }
+  LSraw.set("cat_theme",mode);
+  var b=$("#btnTheme"); if(b) b.textContent=(mode==="dark"?"☀️":"🌙");
+}
 function toggleTheme(){ applyTheme(state.theme==="dark"?"light":"dark"); }
 
 /* ============================ Compression image ========================= */
