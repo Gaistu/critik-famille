@@ -350,9 +350,9 @@ function renderApp(){
   $("#app").innerHTML='<div class="app-root">'+
     '<header class="topbar">'+
       '<div class="brand"><div class="brand__mark">'+
-        '<svg viewBox="0 0 44 44" width="38" height="38" aria-hidden="true">'+
-          '<rect x="3" y="3" width="38" height="38" rx="11" fill="var(--gold)"/>'+
-          '<path d="M18 13.5 L31 22 L18 30.5 Z" fill="#fff"/>'+
+        '<svg viewBox="0 0 512 512" width="38" height="38" aria-hidden="true">'+
+          '<rect width="512" height="512" rx="112" fill="var(--gold)"/>'+
+          '<path d="M256 101 L293.6 204.2 L403.4 208.1 L316.9 275.8 L347.1 381.4 L256 320 L164.9 381.4 L195.1 275.8 L108.6 208.1 L218.4 204.2 Z" fill="#fff"/>'+
         '</svg></div>'+
         '<div><input class="brand__title" id="titleInput" spellcheck="false" title="Clique pour renommer">'+
           '<div class="brand__sub" id="subLine"></div></div></div>'+
