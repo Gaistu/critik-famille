@@ -437,6 +437,7 @@ function renderStatsStrip(){
   strip.innerHTML="";
   var total=document.createElement("button"); total.className="stat stat--total"+(state.fType==="all"?" is-on":"");
   total.innerHTML='<span class="stat__num">'+state.entries.length+'</span><span class="stat__lbl">Tout</span>';
+  if(state.fType==="all"){ var g=(THEMES[state.theme]||THEMES.clair).vars.gold; total.style.background=g; total.style.borderColor=g; total.querySelector(".stat__num").style.color="#241a05"; total.querySelector(".stat__lbl").style.color="rgba(36,26,5,.8)"; }
   total.onclick=function(){ state.fType="all"; renderStatsStrip(); renderList(); }; strip.appendChild(total);
   TYPES.forEach(function(t){ var b=document.createElement("button"); b.className="stat"+(state.fType===t.id?" is-on":"");
     if(state.fType===t.id){ b.style.borderColor=t.color; b.style.background=t.color; } else { b.style.setProperty("--c",t.color); }

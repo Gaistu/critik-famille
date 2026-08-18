@@ -68,7 +68,8 @@ body{
 .stat--total::before{ background:var(--ink) }
 .stat:hover{ transform:translateY(-2px); box-shadow:0 6px 16px rgba(30,20,10,.08) }
 .stat.is-on{ color:#fff; border-color:transparent } .stat.is-on .stat__lbl{ color:rgba(255,255,255,.9) }
-.stat.is-on::before{ opacity:0 } .stat--total.is-on{ background:var(--ink) }
+.stat.is-on::before{ opacity:0 } .stat--total.is-on{ background:var(--gold) }
+.stat--total.is-on .stat__num{ color:#241a05 } .stat--total.is-on .stat__lbl{ color:rgba(36,26,5,.8) }
 .stat__num{ display:block; font-family:'Fraunces',serif; font-weight:700; font-size:26px; line-height:1; padding-left:6px }
 .stat__lbl{ display:block; font-size:12px; color:var(--soft); margin-top:4px; padding-left:6px; font-weight:500 }
 
