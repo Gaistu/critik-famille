@@ -186,23 +186,6 @@ function openThemeMenu(){
   [].forEach.call(overlay.querySelectorAll("[data-x]"),function(b){ b.onclick=close; });
   [].forEach.call(overlay.querySelectorAll("[data-theme]"),function(b){ b.onclick=function(){ applyTheme(b.getAttribute("data-theme")); close(); }; });
 }
-function notifOn(){ return LSraw.get("cat_notif","off")==="on" && ("Notification" in window) && Notification.permission==="granted"; }
-function updateNotifBtn(){ var b=$("#btnNotif"); if(!b) return; b.textContent = notifOn()?"🔔":"🔕"; b.classList.toggle("is-off", !notifOn()); }
-function toggleNotif(){
-  if(!("Notification" in window)){ flash("Ton navigateur ne gère pas les notifications."); return; }
-  if(LSraw.get("cat_notif","off")==="on"){ LSraw.set("cat_notif","off"); updateNotifBtn(); flash("Notifications désactivées."); return; }
-  if(Notification.permission==="granted"){ LSraw.set("cat_notif","on"); updateNotifBtn(); flash("Notifications activées."); return; }
-  if(Notification.permission==="denied"){ flash("Les notifications sont bloquées dans les réglages du navigateur."); return; }
-  Notification.requestPermission().then(function(p){ if(p==="granted"){ LSraw.set("cat_notif","on"); flash("Notifications activées."); } else flash("Notifications refusées."); updateNotifBtn(); });
-}
-function notify(activity){
-  if(!notifOn() || !activity) return;
-  if(activity.member_id===state.active) return;
-  var actor=(memberById(activity.member_id)||{}).name||"Quelqu'un";
-  var verb = activity.action==="add"?"a ajouté" : activity.action==="rate"?"a noté" : activity.action==="delete"?"a supprimé" : "a modifié";
-  var note=(activity.rating&&(activity.action==="rate"||activity.action==="add"))?(" · "+nfr(Number(activity.rating))+"/10"):"";
-  try{ new Notification("Critik Famille", { body: actor+" "+verb+" "+(activity.entry_title||"")+note, icon:"icon.svg", tag:activity.id }); }catch(e){}
-}
 
 /* ============================ Compression image ========================= */
 function fileToThumb(file, maxDim, quality){
@@ -347,7 +330,6 @@ function renderApp(){
           '<div class="brand__sub" id="subLine"></div></div></div>'+
       '<div class="topbar__right">'+
         '<div class="whoami"><span class="whoami__label">C\'est toi&nbsp;:</span><div class="who-chips" id="whoChips"></div></div>'+
-        '<button class="icon-btn" id="btnNotif" title="Notifications">🔔</button>'+
         '<button class="icon-btn" id="btnTheme" title="Thème / couleurs">🎨</button>'+
         '<button class="icon-btn" id="btnMembers" title="Membres de la famille">👥</button>'+
       '</div>'+
@@ -364,7 +346,6 @@ function renderApp(){
   ti.addEventListener("input",function(e){ state.title=e.target.value; updateSub(); });
   ti.addEventListener("blur",function(){ db.from("settings").upsert({key:"title",value:state.title}); });
   $("#btnMembers").onclick=openMembersModal;
-  var nb=$("#btnNotif"); if(nb){ updateNotifBtn(); nb.onclick=toggleNotif; }
   var tb=$("#btnTheme"); if(tb){ tb.textContent="🎨"; tb.onclick=openThemeMenu; }
   var bkl=$("#backupLink"); if(bkl) bkl.onclick=openBackupModal;
   [].forEach.call($("#viewtabs").querySelectorAll("button"),function(b){ b.onclick=function(){ state.view=b.dataset.view; renderContent(); }; });
@@ -1115,7 +1096,7 @@ function subscribeRealtime(){
     .on("postgres_changes",{event:"*",schema:"public",table:"entries"}, function(p){ handleEntryRT(p); })
     .on("postgres_changes",{event:"*",schema:"public",table:"members"}, function(){ resyncMembers(); })
     .on("postgres_changes",{event:"*",schema:"public",table:"settings"}, function(){ resyncSettings(); })
-    .on("postgres_changes",{event:"INSERT",schema:"public",table:"activity"}, function(p){ var a=p.new; if(a && !state.activity.find(function(x){return x.id===a.id;})){ state.activity.unshift(a); state.activity=state.activity.slice(0,30); updateRecent(); notify(a); } })
+    .on("postgres_changes",{event:"INSERT",schema:"public",table:"activity"}, function(p){ var a=p.new; if(a && !state.activity.find(function(x){return x.id===a.id;})){ state.activity.unshift(a); state.activity=state.activity.slice(0,30); updateRecent(); } })
     .subscribe(function(status){ setLive(status==="SUBSCRIBED"); });
 }
 function handleEntryRT(p){
