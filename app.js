@@ -366,11 +366,11 @@ function renderStatsStrip(){
   strip.innerHTML="";
   var total=document.createElement("button"); total.className="stat stat--total"+(state.fType==="all"?" is-on":"");
   total.innerHTML='<span class="stat__num">'+state.entries.length+'</span><span class="stat__lbl">Tout</span>';
-  total.onclick=function(){ state.fType="all"; renderStatsStrip(); renderGrid(); }; strip.appendChild(total);
+  total.onclick=function(){ state.fType="all"; renderStatsStrip(); renderList(); }; strip.appendChild(total);
   TYPES.forEach(function(t){ var b=document.createElement("button"); b.className="stat"+(state.fType===t.id?" is-on":"");
     if(state.fType===t.id){ b.style.borderColor=t.color; b.style.background=t.color; } else { b.style.setProperty("--c",t.color); }
     b.innerHTML='<span class="stat__num">'+counts[t.id]+'</span><span class="stat__lbl">'+t.icon+' '+t.plural+'</span>';
-    b.onclick=function(){ state.fType=state.fType===t.id?"all":t.id; renderStatsStrip(); renderGrid(); }; strip.appendChild(b); });
+    b.onclick=function(){ state.fType=state.fType===t.id?"all":t.id; renderStatsStrip(); renderList(); }; strip.appendChild(b); });
 }
 function relTime(ts){ if(!ts) return ""; var s=(Date.now()-ts)/1000; if(s<60) return "à l'instant"; var m=s/60; if(m<60) return "il y a "+Math.floor(m)+" min"; var h=m/60; if(h<24) return "il y a "+Math.floor(h)+" h"; var d=h/24; if(d<7) return "il y a "+Math.floor(d)+" j"; return new Date(ts).toLocaleDateString("fr-FR"); }
 function actLine(a){
