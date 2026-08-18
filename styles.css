@@ -251,6 +251,17 @@ body{
 .linklike{ background:none; border:none; color:var(--ink); font-family:inherit; font-size:14px; font-weight:600; cursor:pointer; text-align:left; padding:0; flex:1 }
 .linklike:hover{ color:var(--gold) }
 
+/* Suggestions & watchlist */
+.sugg-row,.envie-row{ display:flex; align-items:center; gap:11px; padding:9px 0; border-bottom:1px dashed var(--line); cursor:pointer }
+.sugg-row:last-child,.envie-row:last-child{ border-bottom:none }
+.sugg-row:hover,.envie-row:hover{ background:var(--paper2) }
+.sugg-main,.envie-main{ flex:1; min-width:0; display:flex; flex-direction:column; gap:2px }
+.sugg-title,.envie-title{ font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.sugg-why{ font-size:12.5px; color:var(--soft) }
+.sugg-note{ font-weight:700; white-space:nowrap; font-size:13px }
+.envie-who{ display:flex; align-items:center; gap:5px; flex-wrap:wrap }
+.envie-cnt{ font-size:12.5px; margin-left:2px }
+
 /* Activité récente */
 .recent{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px 14px; margin-bottom:16px }
 .recent__h{ font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--soft); font-weight:600; margin:0 0 8px }

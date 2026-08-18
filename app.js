@@ -367,10 +367,11 @@ function renderApp(){
     '<div class="viewtabs" id="viewtabs">'+
       '<button data-view="catalogue">Cartes</button>'+
       '<button data-view="compact">Liste</button>'+
+      '<button data-view="envies">À voir</button>'+
       '<button data-view="stats">Statistiques</button>'+
     '</div>'+
     '<div id="content"></div>'+
-    '<footer class="foot">Données partagées en temps réel via Supabase.<span class="livedot" id="liveDot"></span>&nbsp;·&nbsp;<button class="reconf" id="backupLink">Sauvegardes</button></footer>'+
+    '<footer class="foot">Données partagées en temps réel via Supabase.<span class="livedot" id="liveDot"></span>&nbsp;·&nbsp;<button class="reconf" id="backupLink">Sauvegardes</button>&nbsp;·&nbsp;<button class="reconf" id="pdfLink">Imprimer / PDF</button></footer>'+
   '</div>';
   var ti=$("#titleInput"); ti.value=state.title;
   ti.addEventListener("input",function(e){ state.title=e.target.value; updateSub(); });
@@ -378,6 +379,7 @@ function renderApp(){
   $("#btnMembers").onclick=openMembersModal;
   var tb=$("#btnTheme"); if(tb){ tb.textContent="🎨"; tb.onclick=openThemeMenu; }
   var bkl=$("#backupLink"); if(bkl) bkl.onclick=openBackupModal;
+  var pl=$("#pdfLink"); if(pl) pl.onclick=exportPDF;
   [].forEach.call($("#viewtabs").querySelectorAll("button"),function(b){ b.onclick=function(){ state.view=b.dataset.view; renderContent(); }; });
   updateSub(); renderWhoami(); renderContent();
 }
@@ -396,6 +398,7 @@ function renderContent(){
   var tabs=$("#viewtabs"); if(tabs) [].forEach.call(tabs.querySelectorAll("button"),function(b){ b.classList.toggle("is-on",b.dataset.view===state.view); });
   var content=$("#content"); if(!content) return;
   if(state.view==="stats"){ content.innerHTML=""; content.appendChild(renderStats()); return; }
+  if(state.view==="envies"){ content.innerHTML=""; content.appendChild(renderEnvies()); return; }
   content.innerHTML=
     '<section class="stats" id="statsStrip"></section>'+
     '<div class="toolbar">'+
@@ -429,6 +432,53 @@ function renderContent(){
   renderStatsStrip(); renderList(); updateRecent();
 }
 function renderList(){ if(state.view==="compact") renderCompact(); else renderGrid(); }
+
+function renderSuggestions(){
+  var sec=document.createElement("section"); sec.className="panel panel--wide";
+  sec.innerHTML='<h3 class="panel__h">🎯 Suggestions pour toi</h3>';
+  var me=state.active, weights={};
+  state.entries.forEach(function(e){ var r=me?myRating(e,me):null; var score=r?r.r:e.rating; if(score>=7){ (e.genres||[]).forEach(function(g){ weights[g]=(weights[g]||0)+(score-6); }); } });
+  var cand=state.entries.filter(function(e){ return (!me||!myRating(e,me)) && Array.isArray(e.genres)&&e.genres.length; })
+    .map(function(e){ var s=0,best=null; (e.genres||[]).forEach(function(g){ if(weights[g]){ s+=weights[g]; if(!best||weights[g]>weights[best]) best=g; } }); return {e:e,score:s,g:best}; })
+    .filter(function(o){return o.score>0;}).sort(function(a,b){return b.score-a.score;}).slice(0,5);
+  if(!cand.length){ sec.innerHTML+='<p class="muted">Note quelques œuvres (7/10 et plus) avec des genres pour recevoir des suggestions basées sur ce que tu aimes.</p>'; return sec; }
+  cand.forEach(function(o){ var t=typeMeta(o.e.type); var row=document.createElement("div"); row.className="sugg-row";
+    row.innerHTML='<span class="podium__dot" style="background:'+t.color+'">'+t.icon+'</span><span class="sugg-main"><span class="sugg-title">'+esc(o.e.title)+'</span><span class="sugg-why">parce que tu aimes '+esc(o.g||"ce genre")+'</span></span>'+(o.e.rating?'<span class="sugg-note">'+nfr(o.e.rating)+'/10</span>':'<span class="muted sugg-note">à voir</span>');
+    row.onclick=function(){ openDetailModal(o.e); }; sec.appendChild(row); });
+  return sec;
+}
+function renderEnvies(){
+  var wrap=document.createElement("div");
+  wrap.appendChild(renderSuggestions());
+  var watched=state.entries.filter(function(e){return watchCount(e)>0;}).sort(function(a,b){return watchCount(b)-watchCount(a)||(b.createdAt||0)-(a.createdAt||0);});
+  var sec=document.createElement("section"); sec.className="panel panel--wide";
+  sec.innerHTML='<h3 class="panel__h">👁 À voir en famille <span class="opt">('+watched.length+')</span></h3>';
+  if(!watched.length){ var p=document.createElement("p"); p.className="muted"; p.textContent="Personne n'a encore d'envie. Sur une fiche, clique l'œil 👁 pour dire « je veux le voir »."; sec.appendChild(p); }
+  else { var list=document.createElement("div"); list.className="envie-list";
+    watched.forEach(function(e){ var t=typeMeta(e.type);
+      var thumb=e.hasCover&&state.covers[e.id]?'<span class="crow__thumb"><img src="'+state.covers[e.id]+'" alt=""></span>':'<span class="crow__thumb crow__thumb--ph" style="background:'+t.color+'22;color:'+t.color+'">'+t.icon+'</span>';
+      var who=(e.watchers||[]).map(function(id){ var m=memberById(id); return m?'<span class="avatar avatar--sm" style="background:'+m.color+'" title="'+esc(m.name)+'">'+esc(m.name.slice(0,1).toUpperCase())+'</span>':''; }).join("");
+      var row=document.createElement("div"); row.className="envie-row";
+      row.innerHTML=thumb+'<span class="envie-main"><span class="envie-title">'+t.icon+' '+esc(e.title)+(e.year?' <span class="crow__year">· '+esc(e.year)+'</span>':'')+'</span><span class="envie-who">'+who+'<span class="muted envie-cnt">'+watchCount(e)+(watchCount(e)>1?' envies':' envie')+'</span></span></span>';
+      row.onclick=function(){ openDetailModal(e); }; list.appendChild(row); });
+    sec.appendChild(list);
+  }
+  wrap.appendChild(sec);
+  return wrap;
+}
+function exportPDF(){
+  var top=state.entries.filter(function(e){return e.rating>0;}).sort(function(a,b){return b.rating-a.rating||ratersN(b)-ratersN(a);}).slice(0,40);
+  var rows=top.map(function(e,i){ var t=typeMeta(e.type); return '<tr><td class="r">'+(i+1)+'</td><td>'+esc(e.title)+(e.year?' <span class="y">('+esc(e.year)+')</span>':'')+'</td><td>'+esc(t.label)+'</td><td class="n">'+nfr(e.rating)+'/10</td><td class="r">'+ratersN(e)+'</td></tr>'; }).join("");
+  var doc='<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>'+esc(state.title)+' — Best-of</title>'+
+    '<style>*{box-sizing:border-box}body{font-family:Georgia,serif;color:#1a1a1a;max-width:720px;margin:24px auto;padding:0 20px}h1{font-size:26px;margin:0}.sub{color:#777;margin:2px 0 20px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:7px 8px;border-bottom:1px solid #ddd;text-align:left}th{border-bottom:2px solid #999;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#555}td.r,th.r{text-align:right;color:#777;width:34px}td.n{text-align:right;font-weight:bold;white-space:nowrap}.y{color:#999}.foot{margin-top:22px;color:#aaa;font-size:11px;text-align:center}@media print{body{margin:0}}</style>'+
+    '</head><body><h1>'+esc(state.title)+'</h1><p class="sub">Best-of de la famille — '+new Date().toLocaleDateString("fr-FR")+' · '+state.entries.length+' fiches</p>'+
+    '<table><thead><tr><th class="r">#</th><th>Titre</th><th>Type</th><th class="n">Note</th><th class="r">Avis</th></tr></thead><tbody>'+(rows||'<tr><td colspan="5">Aucune note pour l\'instant.</td></tr>')+'</tbody></table>'+
+    '<p class="foot">Généré par Critik Famille</p></body></html>';
+  var w=window.open("","_blank");
+  if(!w){ flash("Autorise les fenêtres pop-up pour l'export PDF."); return; }
+  w.document.open(); w.document.write(doc); w.document.close(); w.focus();
+  setTimeout(function(){ try{ w.print(); }catch(e){} }, 350);
+}
 function fillSelect(sel,options,value,onChange){ sel.innerHTML="";
   options.forEach(function(pair){ var o=document.createElement("option"); o.value=pair[0]; o.textContent=pair[1]; sel.appendChild(o); });
   sel.value=value; sel.onchange=function(){ onChange(sel.value); }; }
@@ -498,6 +548,7 @@ function toggleFav(e){
 }
 function isWatch(e){ return Array.isArray(e.watchers) && state.active && e.watchers.indexOf(state.active)>=0; }
 function watchCount(e){ return Array.isArray(e.watchers)?e.watchers.length:0; }
+function ratersN(e){ return Array.isArray(e.ratings)?e.ratings.filter(function(x){return x.r>0;}).length:0; }
 function toggleWatch(e){
   if(!state.active){ flash("Choisis d'abord qui tu es (en haut)."); return; }
   var ws=Array.isArray(e.watchers)?e.watchers.slice():[];
