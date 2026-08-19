@@ -46,6 +46,9 @@ function jsonp(url){ return new Promise(function(resolve,reject){
 }); }
 var TMDB_GENRES={28:"Action",12:"Aventure",16:"Animation",35:"Comédie",80:"Crime",99:"Documentaire",18:"Drame",10751:"Familial",14:"Fantastique",36:"Histoire",27:"Horreur",10402:"Musique",9648:"Mystère",10749:"Romance",878:"Science-fiction",10770:"Téléfilm",53:"Thriller",10752:"Guerre",37:"Western",10759:"Action & Aventure",10762:"Enfants",10763:"Actualités",10764:"Téléréalité",10765:"Sci-Fi & Fantastique",10766:"Feuilleton",10767:"Talk",10768:"Guerre & Politique"};
 function mapGenres(ids){ return (ids||[]).map(function(id){return TMDB_GENRES[id];}).filter(Boolean); }
+var GENRE_NORM={"sci-fi":"Science-fiction","scifi":"Science-fiction","science fiction":"Science-fiction","science-fiction":"Science-fiction","sf":"Science-fiction","action & adventure":"Action & Aventure","action et aventure":"Action & Aventure","action & aventure":"Action & Aventure","sci-fi & fantasy":"Sci-Fi & Fantastique","sci-fi & fantastique":"Sci-Fi & Fantastique","science-fiction & fantastique":"Sci-Fi & Fantastique","comedy":"Comédie","comédie":"Comédie","drama":"Drame","drame":"Drame","horror":"Horreur","horreur":"Horreur","thriller":"Thriller","romance":"Romance","romantique":"Romance","fantasy":"Fantastique","fantastique":"Fantastique","fantaisie":"Fantastique","animation":"Animation","adventure":"Aventure","aventure":"Aventure","crime":"Crime","policier":"Crime","documentary":"Documentaire","documentaire":"Documentaire","family":"Familial","familial":"Familial","famille":"Familial","history":"Histoire","historique":"Histoire","histoire":"Histoire","music":"Musique","musical":"Musique","musique":"Musique","mystery":"Mystère","mystère":"Mystère","war":"Guerre","guerre":"Guerre","western":"Western","kids":"Enfants","enfants":"Enfants","jeunesse":"Enfants","reality":"Téléréalité","reality-tv":"Téléréalité","téléréalité":"Téléréalité","news":"Actualités","actualités":"Actualités","soap":"Feuilleton","feuilleton":"Feuilleton","talk":"Talk","war & politics":"Guerre & Politique","guerre & politique":"Guerre & Politique","tv movie":"Téléfilm","téléfilm":"Téléfilm","aventure fantastique":"Fantastique","épouvante-horreur":"Horreur","arts martiaux":"Action"};
+function normGenre(g){ if(!g) return ""; var key=(""+g).trim().toLowerCase(); if(GENRE_NORM[key]) return GENRE_NORM[key]; var s=(""+g).trim(); return s.charAt(0).toUpperCase()+s.slice(1); }
+function normGenres(arr){ var out=[],seen={}; (arr||[]).forEach(function(g){ var n=normGenre(g); if(n && !seen[n.toLowerCase()]){ seen[n.toLowerCase()]=1; out.push(n); } }); return out; }
 function srcTMDB(kind,q){
   if(!tmdbKey()) return Promise.reject(new Error("no-key"));
   var url="https://api.themoviedb.org/3/search/"+kind+"?api_key="+encodeURIComponent(tmdbKey())+"&language=fr-FR&include_adult=false&query="+encodeURIComponent(q);
@@ -122,6 +125,7 @@ var SETUP_SQL =
 "  watchers jsonb,\n"+
 "  synopsis text,\n"+
 "  genres jsonb,\n"+
+"  progress text,\n"+
 "  member_id text,\n"+
 "  rating numeric default 0,\n"+
 "  rating_manual numeric,\n"+
@@ -257,7 +261,7 @@ function rowToEntry(r){
     ratings=[{m:r.member_id, r:Number(r.rating)||0, rev:r.review||""}];
   }
   var avg = ratings.length ? ratingsAverage(ratings) : (Number(r.rating)||0);
-  return { id:r.id, type:r.type, title:r.title, year:r.year||"", synopsis:r.synopsis||"", genres:(Array.isArray(r.genres)?r.genres:[]), season:r.season||"", seasons:(Array.isArray(r.seasons)?r.seasons:[]), memberId:r.member_id,
+  return { id:r.id, type:r.type, title:r.title, year:r.year||"", synopsis:r.synopsis||"", genres:normGenres(Array.isArray(r.genres)?r.genres:[]), progress:r.progress||"", season:r.season||"", seasons:(Array.isArray(r.seasons)?r.seasons:[]), memberId:r.member_id,
     rating:avg, ratings:ratings, review:r.review||"", status:r.status||"done",
     hasCover:!!r.cover, createdAt:r.created_at?new Date(r.created_at).getTime():0, favorites:(Array.isArray(r.favorites)?r.favorites:[]), watchers:(Array.isArray(r.watchers)?r.watchers:[]) };
 }
@@ -367,7 +371,6 @@ function renderApp(){
     '<div class="viewtabs" id="viewtabs">'+
       '<button data-view="catalogue">Cartes</button>'+
       '<button data-view="compact">Liste</button>'+
-      '<button data-view="envies">À voir</button>'+
       '<button data-view="stats">Statistiques</button>'+
     '</div>'+
     '<div id="content"></div>'+
@@ -398,7 +401,6 @@ function renderContent(){
   var tabs=$("#viewtabs"); if(tabs) [].forEach.call(tabs.querySelectorAll("button"),function(b){ b.classList.toggle("is-on",b.dataset.view===state.view); });
   var content=$("#content"); if(!content) return;
   if(state.view==="stats"){ content.innerHTML=""; content.appendChild(renderStats()); return; }
-  if(state.view==="envies"){ content.innerHTML=""; content.appendChild(renderEnvies()); return; }
   content.innerHTML=
     '<section class="stats" id="statsStrip"></section>'+
     '<div class="toolbar">'+
@@ -409,8 +411,6 @@ function renderContent(){
       '<select class="select" id="fMinNote"></select>'+
       '<select class="select" id="sortSel"></select>'+
       '<select class="select" id="groupSel"></select>'+
-      '<button class="fav-toggle" id="favToggle" title="N\'afficher que mes coups de cœur">♡ Coups de cœur</button>'+
-      '<button class="fav-toggle" id="watchToggle" title="N\'afficher que mes envies à voir">👁 À voir</button>'+
       '<button class="fav-toggle" id="viewsBtn" title="Vues enregistrées">★ Vues</button>'+
       '<button class="add-btn" id="addBtn">+ Ajouter</button>'+
     '</div>'+
@@ -426,9 +426,7 @@ function renderContent(){
   fillSelect($("#groupSel"), [["none","Sans regroupement"],["type","Grouper par type"],["member","Grouper par personne"]], state.group, function(v){ state.group=v; renderList(); });
   fillSelect($("#fMinNote"), [["0","Toutes les notes"],["5","≥ 5/10"],["6","≥ 6/10"],["7","≥ 7/10"],["8","≥ 8/10"],["9","≥ 9/10"]], String(state.fMinNote), function(v){ state.fMinNote=parseFloat(v)||0; renderList(); });
   var vb=$("#viewsBtn"); if(vb) vb.onclick=openViewsMenu;
-  var wt=$("#watchToggle"); if(wt){ wt.className="fav-toggle"+(state.watchOnly?" is-on-watch":""); wt.onclick=function(){ state.watchOnly=!state.watchOnly; wt.className="fav-toggle"+(state.watchOnly?" is-on-watch":""); renderList(); }; }
   $("#addBtn").onclick=function(){ openEntryModal(null); };
-  var ft=$("#favToggle"); if(ft){ ft.className="fav-toggle"+(state.favOnly?" is-on":""); ft.textContent=(state.favOnly?"❤":"♡")+" Coups de cœur"; ft.onclick=function(){ state.favOnly=!state.favOnly; ft.className="fav-toggle"+(state.favOnly?" is-on":""); ft.textContent=(state.favOnly?"❤":"♡")+" Coups de cœur"; renderList(); }; }
   renderStatsStrip(); renderList(); updateRecent();
 }
 function renderList(){ if(state.view==="compact") renderCompact(); else renderGrid(); }
@@ -447,25 +445,7 @@ function renderSuggestions(){
     row.onclick=function(){ openDetailModal(o.e); }; sec.appendChild(row); });
   return sec;
 }
-function renderEnvies(){
-  var wrap=document.createElement("div");
-  wrap.appendChild(renderSuggestions());
-  var watched=state.entries.filter(function(e){return watchCount(e)>0;}).sort(function(a,b){return watchCount(b)-watchCount(a)||(b.createdAt||0)-(a.createdAt||0);});
-  var sec=document.createElement("section"); sec.className="panel panel--wide";
-  sec.innerHTML='<h3 class="panel__h">👁 À voir en famille <span class="opt">('+watched.length+')</span></h3>';
-  if(!watched.length){ var p=document.createElement("p"); p.className="muted"; p.textContent="Personne n'a encore d'envie. Sur une fiche, clique l'œil 👁 pour dire « je veux le voir »."; sec.appendChild(p); }
-  else { var list=document.createElement("div"); list.className="envie-list";
-    watched.forEach(function(e){ var t=typeMeta(e.type);
-      var thumb=e.hasCover&&state.covers[e.id]?'<span class="crow__thumb"><img src="'+state.covers[e.id]+'" alt=""></span>':'<span class="crow__thumb crow__thumb--ph" style="background:'+t.color+'22;color:'+t.color+'">'+t.icon+'</span>';
-      var who=(e.watchers||[]).map(function(id){ var m=memberById(id); return m?'<span class="avatar avatar--sm" style="background:'+m.color+'" title="'+esc(m.name)+'">'+esc(m.name.slice(0,1).toUpperCase())+'</span>':''; }).join("");
-      var row=document.createElement("div"); row.className="envie-row";
-      row.innerHTML=thumb+'<span class="envie-main"><span class="envie-title">'+t.icon+' '+esc(e.title)+(e.year?' <span class="crow__year">· '+esc(e.year)+'</span>':'')+'</span><span class="envie-who">'+who+'<span class="muted envie-cnt">'+watchCount(e)+(watchCount(e)>1?' envies':' envie')+'</span></span></span>';
-      row.onclick=function(){ openDetailModal(e); }; list.appendChild(row); });
-    sec.appendChild(list);
-  }
-  wrap.appendChild(sec);
-  return wrap;
-}
+function renderEnviesRemoved(){ return null; }
 function exportPDF(){
   var top=state.entries.filter(function(e){return e.rating>0;}).sort(function(a,b){return b.rating-a.rating||ratersN(b)-ratersN(a);}).slice(0,40);
   var rows=top.map(function(e,i){ var t=typeMeta(e.type); return '<tr><td class="r">'+(i+1)+'</td><td>'+esc(e.title)+(e.year?' <span class="y">('+esc(e.year)+')</span>':'')+'</td><td>'+esc(t.label)+'</td><td class="n">'+nfr(e.rating)+'/10</td><td class="r">'+ratersN(e)+'</td></tr>'; }).join("");
@@ -566,8 +546,6 @@ function visibleEntries(){
   if(state.fStatus!=="all") list=list.filter(function(e){return (e.status||"done")===state.fStatus;});
   if(state.fGenre!=="all") list=list.filter(function(e){return Array.isArray(e.genres)&&e.genres.indexOf(state.fGenre)>=0;});
   if(state.fMinNote>0) list=list.filter(function(e){return (e.rating||0)>=state.fMinNote;});
-  if(state.favOnly) list=list.filter(function(e){return isFav(e);});
-  if(state.watchOnly) list=list.filter(function(e){return isWatch(e);});
   var q=state.query.trim().toLowerCase();
   if(q) list=list.filter(function(e){ return (e.title||"").toLowerCase().indexOf(q)>=0 || (e.review||"").toLowerCase().indexOf(q)>=0 || ((memberById(e.memberId)||{}).name||"").toLowerCase().indexOf(q)>=0; });
   if(state.sort==="recent") list.sort(function(a,b){ return (b.createdAt||0)-(a.createdAt||0); });
@@ -579,7 +557,7 @@ function visibleEntries(){
 }
 function entryCardEl(e){
   var t=typeMeta(e.type), m=memberById(e.memberId), st=statusMeta(e.status||"done");
-  var foot=e.status==="doing"?"En cours":e.status==="todo"?"À voir":"";
+  var foot=e.status==="doing"?("En cours"+(e.progress?" · "+esc(e.progress):"")):e.status==="todo"?"À voir":"";
   var cover=e.hasCover&&state.covers[e.id]?'<div class="cover" style="background:'+t.color+'18"><img src="'+state.covers[e.id]+'" alt=""></div>':"";
   var badge=(e.status&&e.status!=="done")?'<span class="status-chip" style="color:'+st.color+';border-color:'+st.color+'">'+st.icon+' '+st.label+'</span>':"";
   var avatar="";
@@ -589,17 +567,14 @@ function entryCardEl(e){
   var isSer=(e.type==="serie"||e.type==="anime"); var seasons=Array.isArray(e.seasons)?e.seasons:[];
   var doneChip=(isSer&&e.status==="done")?'<span class="status-chip" style="color:#3F7A3A;border-color:#3F7A3A">✓ Terminée</span>':"";
   var seasonStrip=(isSer&&seasons.length)?'<div class="season-strip">'+seasons.map(function(s){ var k=seasonKind(s); var lab = k==="oav" ? ("OAV"+(s.name?" "+esc(s.name):"")) : k==="film" ? ("Film"+(s.name?" "+esc(s.name):"")) : /^\d+$/.test(String(s.n))?("S"+esc(s.n)):esc(s.n); return '<span class="season-chip">'+lab+(s.rating?'&nbsp;·&nbsp;'+nfr(s.rating):'')+'</span>'; }).join("")+'</div>':"";
-  var fav=isFav(e);
   var card=document.createElement("article"); card.className="card card--click"; card.style.setProperty("--c",t.color);
   card.innerHTML='<div class="card__spine"></div><div class="card__body">'+cover+
     '<div class="card__top"><span class="pill" style="color:'+t.color+';border-color:'+t.color+'">'+t.icon+' '+t.label+'</span>'+
-      '<div class="card__badges">'+badge+doneChip+'<button class="fav-btn watch-btn'+(isWatch(e)?' is-on':'')+'" data-act="watch" title="À voir / envie">👁</button><button class="fav-btn'+(fav?' is-on':'')+'" data-act="fav" title="Coup de cœur">'+(fav?'❤':'♡')+'</button>'+avatar+'</div></div>'+
+      '<div class="card__badges">'+badge+doneChip+avatar+'</div></div>'+
     '<h3 class="card__title">'+esc(e.title)+year+'</h3>'+
     '<div class="card__rating">'+score+'</div>'+seasonStrip+
     '<div class="card__foot"><span>'+foot+'</span>'+
       '<span class="card__actions"><button data-act="edit" title="Modifier">✎</button><button data-act="del" title="Supprimer">🗑</button></span></div></div>';
-  card.querySelector('[data-act="fav"]').onclick=function(ev){ ev.stopPropagation(); toggleFav(e); };
-  var wb=card.querySelector('[data-act="watch"]'); if(wb) wb.onclick=function(ev){ ev.stopPropagation(); toggleWatch(e); };
   card.querySelector('[data-act="edit"]').onclick=function(ev){ ev.stopPropagation(); openEntryModal(e); };
   card.querySelector('[data-act="del"]').onclick=function(ev){ ev.stopPropagation(); deleteEntry(e); };
   var av=card.querySelector('[data-act="member"]'); if(av) av.onclick=function(ev){ ev.stopPropagation(); openMemberModal(e.memberId); };
@@ -641,10 +616,8 @@ function entryRowEl(e){
   row.innerHTML=thumb+
     '<span class="crow__main"><span class="crow__title">'+esc(e.title)+season+year+'</span>'+
       '<span class="crow__meta"><span class="crow__type" style="color:'+t.color+'">'+t.icon+' '+t.label+'</span>'+badge+score+'</span></span>'+
-    '<span class="crow__right"><button class="fav-btn watch-btn'+(isWatch(e)?' is-on':'')+'" data-act="watch" title="À voir / envie">👁</button><button class="fav-btn'+(isFav(e)?' is-on':'')+'" data-act="fav" title="Coup de cœur">'+(isFav(e)?'❤':'♡')+'</button>'+avatar+
+    '<span class="crow__right">'+avatar+
       '<span class="crow__actions"><button data-act="edit" title="Modifier">✎</button><button data-act="del" title="Supprimer">🗑</button></span></span>';
-  row.querySelector('[data-act="fav"]').onclick=function(ev){ ev.stopPropagation(); toggleFav(e); };
-  var rwb=row.querySelector('[data-act="watch"]'); if(rwb) rwb.onclick=function(ev){ ev.stopPropagation(); toggleWatch(e); };
   row.querySelector('[data-act="edit"]').onclick=function(ev){ ev.stopPropagation(); openEntryModal(e); };
   row.querySelector('[data-act="del"]').onclick=function(ev){ ev.stopPropagation(); deleteEntry(e); };
   var rav=row.querySelector('[data-act="member"]'); if(rav) rav.onclick=function(ev){ ev.stopPropagation(); openMemberModal(e.memberId); };
@@ -734,12 +707,13 @@ function renderStats(){
       '<section class="panel"><h3 class="panel__h">Type préféré par personne</h3>'+(favType.length?favType.map(function(o){ return '<div class="brow2"><span class="brow__name"><span class="dot" style="background:'+o.m.color+'"></span>'+esc(o.m.name)+'</span><span class="fav-type" style="color:'+o.best.color+'">'+o.best.icon+' '+o.best.plural+'</span><span class="brow__val">'+o.bc+'</span></div>'; }).join(""):'<p class="muted">—</p>')+'</section>'+
       '<section class="panel"><h3 class="panel__h">Note moyenne par mois</h3><div class="months">'+months.map(function(x){ var a=x.rc?x.sum/x.rc:0; return '<div class="mcol"><div class="mcol__wrap"><div class="mcol__bar mcol__bar--gold" style="height:'+(a/10*100)+'%"></div></div><div class="mcol__n">'+(a?avg1(a):"–")+'</div><div class="mcol__l">'+esc(x.label)+'</div></div>'; }).join("")+'</div></section>'+
       '<section class="panel"><h3 class="panel__h">Records</h3>'+(bestE?'<div class="rec-row"><span class="rec-medal">🥇</span><span class="rec-txt">'+typeMeta(bestE.type).icon+' '+esc(bestE.title)+'</span><b>'+nfr(bestE.rating)+'/10</b></div>':'<p class="muted">Aucune note pour l\'instant.</p>')+((worstE&&worstE!==bestE)?'<div class="rec-row"><span class="rec-medal">🥉</span><span class="rec-txt">'+typeMeta(worstE.type).icon+' '+esc(worstE.title)+'</span><b>'+nfr(worstE.rating)+'/10</b></div>':'')+'</section>'+
-      '<section class="panel"><h3 class="panel__h">Comparaison des membres</h3><div class="cmp"><div class="cmp__head"><span>Membre</span><span>Notes</span><span>Moy.</span><span>Max</span><span>❤</span></div>'+cmp.map(function(o){ return '<div class="cmp__row"><span class="brow__name"><span class="dot" style="background:'+o.m.color+'"></span>'+esc(o.m.name)+'</span><span>'+o.count+'</span><span>'+(o.avg?avg1(o.avg):"—")+'</span><span>'+(o.max?nfr(o.max):"—")+'</span><span>'+o.fav+'</span></div>'; }).join("")+'</div></section>'+
+      '<section class="panel"><h3 class="panel__h">Comparaison des membres</h3><div class="cmp"><div class="cmp__head"><span>Membre</span><span>Notes</span><span>Moy.</span><span>Max</span></div>'+cmp.map(function(o){ return '<div class="cmp__row"><span class="brow__name"><span class="dot" style="background:'+o.m.color+'"></span>'+esc(o.m.name)+'</span><span>'+o.count+'</span><span>'+(o.avg?avg1(o.avg):"—")+'</span><span>'+(o.max?nfr(o.max):"—")+'</span></div>'; }).join("")+'</div></section>'+
       '<section class="panel panel--wide"><h3 class="panel__h">Genres de la famille <span class="opt">(nombre de fiches · note moyenne)</span></h3>'+(genreArr.length?genreArr.map(function(o){ return '<div class="brow"><span class="brow__name">'+esc(o.g)+'</span><div class="bar"><span style="width:'+(o.n/maxGenre*100)+'%;background:var(--gold)"></span></div><span class="brow__val">'+o.n+'</span><span class="brow__avg">'+(o.avg?avg1(o.avg)+"/10":"—")+'</span></div>'; }).join(""):'<p class="muted">Ajoute des genres à tes fiches (recherche automatique ou champ « Genres ») pour voir ces statistiques.</p>')+'</section>'+
     '</div>';
   fillSelect(wrap.querySelector("#whoSel"), [["all","Tout le monde"]].concat(state.members.map(function(m){return [m.id,m.name];})), state.who, function(v){ state.who=v; renderContent(); });
   [].forEach.call(wrap.querySelectorAll(".brow--click[data-mid]"),function(el){ el.onclick=function(){ openMemberModal(el.getAttribute("data-mid")); }; });
   [].forEach.call(wrap.querySelectorAll(".podium__click[data-id]"),function(el){ el.onclick=function(){ var e=state.entries.find(function(x){return x.id===el.getAttribute("data-id");}); if(e) openDetailModal(e); }; });
+  wrap.insertBefore(renderSuggestions(), wrap.firstChild);
   return wrap;
 }
 
@@ -747,7 +721,7 @@ function renderStats(){
 function openEntryModal(entry){
   var isEdit=!!entry;
   var form={ id:entry?entry.id:null, type:entry?entry.type:(state.fType==="all"?"film":state.fType),
-    title:entry?entry.title||"":"", year:entry?entry.year||"":"", synopsis:entry?entry.synopsis||"":"", genres:(entry&&Array.isArray(entry.genres))?entry.genres.slice():[], memberId:entry?entry.memberId:state.active,
+    title:entry?entry.title||"":"", year:entry?entry.year||"":"", synopsis:entry?entry.synopsis||"":"", genres:(entry&&Array.isArray(entry.genres))?entry.genres.slice():[], progress:entry?entry.progress||"":"", memberId:entry?entry.memberId:state.active,
     rating:0, review:"", status:entry?entry.status||"done":"done", hasCover:entry?!!entry.hasCover:false,
     ratings:(entry&&Array.isArray(entry.ratings))?entry.ratings.map(function(x){return {m:x.m,r:x.r,rev:x.rev};}):[],
     seasons:(entry&&Array.isArray(entry.seasons))?entry.seasons.map(function(s){return {n:s.n,rating:s.rating,review:s.review,kind:s.kind,name:s.name};}):[] };
@@ -764,6 +738,7 @@ function openEntryModal(entry){
     '<div class="tmdb-search"><button type="button" class="ghost" id="searchBtn">🔍 Rechercher le titre</button><span class="tmdb-hint" id="searchHint"></span></div>'+
     '<div class="search-results" id="searchResults"></div>'+
     '<div class="field"><label class="field__label">Genres / étiquettes <span class="opt">(séparés par des virgules)</span></label><input class="input" id="fGenres" placeholder="Action, Comédie…"></div>'+
+    '<div class="field"><label class="field__label">Marque-page <span class="opt">(où en es-tu ? page, épisode…)</span></label><input class="input" id="fProgress" placeholder="Page 234 · Saison 2 ép. 5 · 42 %…"></div>'+
     '<div class="field" id="statusField"><label class="field__label">Statut</label><div class="type-picker" id="statusPick"></div></div>'+
     '<div class="field" id="finishedField"><label class="field__label">Diffusion</label><button type="button" class="toggle-btn" id="finishedBtn"></button></div>'+
     '<div class="field" id="famNotesField"><label class="field__label">Notes de la famille</label><div class="fam-notes" id="famNotes"></div></div>'+
@@ -797,6 +772,8 @@ function openEntryModal(entry){
   var genEl=overlay.querySelector("#fGenres");
   genEl.value=(form.genres||[]).join(", ");
   genEl.oninput=function(e){ form.genres=e.target.value.split(",").map(function(s){return s.trim();}).filter(Boolean); };
+  var pgEl=overlay.querySelector("#fProgress");
+  if(pgEl){ pgEl.value=form.progress||""; pgEl.oninput=function(e){ form.progress=e.target.value.slice(0,80); }; }
   var finishedField=overlay.querySelector("#finishedField");
   var finishedBtn=overlay.querySelector("#finishedBtn");
   function drawFinished(){ var on=form.status==="done"; finishedBtn.className="toggle-btn"+(on?" is-on":""); finishedBtn.textContent=on?"✓ Série terminée":"Série en cours de diffusion"; }
@@ -917,13 +894,14 @@ function openEntryModal(entry){
     var ratings=_base.filter(function(x){ return x && x.m && x.m!==meId; });
     if((form.rating||0)>0 || (form.review&&form.review.trim())) ratings.push({m:meId, r:form.rating||0, rev:form.review||""});
     var ratingVal = ratingsAverage(ratings);
-    var row={ id:id, type:form.type, title:title, year:form.year||null, synopsis:form.synopsis||null, genres:(form.genres&&form.genres.length?form.genres:null), member_id:(isNew?meId:(entry?entry.memberId:meId))||null, rating:ratingVal, ratings:ratings, review:null, status:form.status, seasons: series?seasonsClean:null };
+    var _g=normGenres(form.genres);
+    var row={ id:id, type:form.type, title:title, year:form.year||null, synopsis:form.synopsis||null, genres:(_g.length?_g:null), progress:form.progress||null, member_id:(isNew?meId:(entry?entry.memberId:meId))||null, rating:ratingVal, ratings:ratings, review:null, status:form.status, seasons: series?seasonsClean:null };
     if(coverChanged) row.cover=coverValue||null;
     if(isNew) row.created_at=new Date().toISOString();
     saveBtn.disabled=true; saveBtn.textContent="Enregistrement…";
     db.from("entries").upsert(row).then(function(r){
       if(r.error){ flash("Erreur : "+r.error.message); saveBtn.disabled=false; saveBtn.textContent=isEdit?"Enregistrer":"Ajouter au catalogue"; return; }
-      var localEntry={ id:id, type:form.type, title:title, year:form.year||"", synopsis:form.synopsis||"", genres:(form.genres||[]).slice(), seasons:series?seasonsClean:[], memberId:row.member_id, rating:ratingVal, ratings:ratings, review:"", status:form.status,
+      var localEntry={ id:id, type:form.type, title:title, year:form.year||"", synopsis:form.synopsis||"", genres:_g, progress:form.progress||"", seasons:series?seasonsClean:[], memberId:row.member_id, rating:ratingVal, ratings:ratings, review:"", status:form.status,
         hasCover: coverChanged?!!coverValue:form.hasCover, createdAt: isNew?Date.now():(entry.createdAt||Date.now()), favorites:(entry&&Array.isArray(entry.favorites))?entry.favorites:[] };
       var i=state.entries.findIndex(function(e){return e.id===id;}); if(i>=0) state.entries[i]=localEntry; else state.entries.unshift(localEntry);
       if(coverChanged){ if(coverValue) state.covers[id]=coverValue; else delete state.covers[id]; }
@@ -976,6 +954,7 @@ function openDetailModal(e){
     ? '<div class="detail-cover"><img src="'+state.covers[e.id]+'" alt=""></div>'
     : '<div class="detail-cover detail-cover--ph" style="background:'+t.color+'18;color:'+t.color+'">'+t.icon+'</div>';
   var meta=[]; if(e.year) meta.push(esc(e.year));
+  if(e.progress) meta.push("🔖 "+esc(e.progress));
   meta.push(isSer ? (e.status==="done"?"Série terminée":"En cours de diffusion") : statusMeta(e.status||"done").label);
   var rlist=(e.ratings||[]).filter(function(x){ return x.r>0 || (x.rev&&(""+x.rev).trim()); });
   var raters=rlist.filter(function(x){return x.r>0;}).length;
@@ -1055,20 +1034,20 @@ function openMemberModal(id){
   var mine=state.entries.filter(function(e){ var mr=myRating(e,id); return mr&&(mr.r>0||(mr.rev&&(""+mr.rev).trim())); });
   var given=[]; mine.forEach(function(e){ var mr=myRating(e,id); if(mr&&mr.r>0) given.push(mr.r); });
   var avg=given.length? avg1(given.reduce(function(a,r){return a+r;},0)/given.length):"—";
-  var favs=state.entries.filter(function(e){return Array.isArray(e.favorites)&&e.favorites.indexOf(id)>=0;});
   var perType=TYPES.map(function(t){return {t:t,c:mine.filter(function(e){return e.type===t.id;}).length};}).filter(function(o){return o.c;});
   var recent=mine.slice().sort(function(a,b){return (b.createdAt||0)-(a.createdAt||0);}).slice(0,6);
   function line(e){ var t=typeMeta(e.type); var mr=myRating(e,id); return '<div class="mp-item" data-id="'+e.id+'"><span>'+t.icon+' '+esc(e.title)+'</span>'+((mr&&mr.r)?'<b>'+nfr(mr.r)+'/10</b>':'')+'</div>'; }
+  var best=mine.filter(function(e){ var mr=myRating(e,id); return mr&&mr.r>0; }).sort(function(a,b){ return myRating(b,id).r-myRating(a,id).r; }).slice(0,8);
   var overlay=document.createElement("div"); overlay.className="overlay";
   overlay.innerHTML='<div class="modal" style="--c:'+m.color+'">'+
     '<div class="modal__head"><h2 class="mp-title"><span class="avatar" style="background:'+m.color+'">'+esc(m.name.slice(0,1).toUpperCase())+'</span> '+esc(m.name)+'</h2><button class="x" data-x>✕</button></div>'+
     '<div class="mp-stats">'+
       '<div class="mp-stat"><span class="mp-num">'+mine.length+'</span><span class="mp-lbl">œuvres notées</span></div>'+
       '<div class="mp-stat"><span class="mp-num">'+avg+'</span><span class="mp-lbl">note moy. /10</span></div>'+
-      '<div class="mp-stat"><span class="mp-num">'+favs.length+'</span><span class="mp-lbl">coups de cœur</span></div>'+
+      '<div class="mp-stat"><span class="mp-num">'+(given.length?nfr(Math.max.apply(null,given)):"—")+'</span><span class="mp-lbl">meilleure note</span></div>'+
     '</div>'+
     '<label class="field__label">Par type</label><div class="mp-types">'+(perType.length?perType.map(function(o){return '<span class="mp-type" style="border-color:'+o.t.color+';color:'+o.t.color+'">'+o.t.icon+' '+o.t.plural+' '+o.c+'</span>';}).join(""):'<span class="muted">—</span>')+'</div>'+
-    '<label class="field__label">Coups de cœur</label><div class="mp-list">'+(favs.length?favs.slice(0,8).map(line).join(""):'<span class="muted">Aucun pour l\'instant.</span>')+'</div>'+
+    '<label class="field__label">Ses mieux notées</label><div class="mp-list">'+(best.length?best.map(line).join(""):'<span class="muted">Aucune note pour l\'instant.</span>')+'</div>'+
     '<label class="field__label">Derniers ajouts</label><div class="mp-list">'+(recent.length?recent.map(line).join(""):'<span class="muted">Rien pour l\'instant.</span>')+'</div>'+
     '<div class="modal__foot"><button class="ghost" data-x>Fermer</button></div></div>';
   document.body.appendChild(overlay);
